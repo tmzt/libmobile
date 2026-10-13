@@ -80,7 +80,12 @@ impl Plugin {
 
 /// Every plugin the crate ships, in dispatch order. Core bridges come first so
 /// a feature plugin's `onCreate` can rely on insets/intents already being wired.
-pub const PLUGINS: &[Plugin] = &[];
+pub const PLUGINS: &[Plugin] = &[Plugin {
+    feature: None,
+    dir: "bridge",
+    class: "bridge.WindowInsetsPlugin",
+    contributes: Contributes::NOTHING,
+}];
 
 /// Every feature name the registry knows, deduplicated, in declaration order.
 pub fn known_features() -> Vec<&'static str> {
@@ -445,6 +450,15 @@ mod tests {
         assert!(script.contains("// features: <none>\n"));
         assert!(!script.contains("dependencies"));
         assert!(!script.contains("MERGED_MANIFEST"));
+    }
+
+    #[test]
+    fn window_insets_plugin_is_core() {
+        assert!(
+            active_plugins(&[])
+                .iter()
+                .any(|p| p.class == "bridge.WindowInsetsPlugin")
+        );
     }
 
     #[test]

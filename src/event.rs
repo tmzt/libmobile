@@ -6,6 +6,8 @@
 //! window *handles* are not carried — read `AndroidApp::native_window()` on
 //! [`MobileEvent::WindowCreated`].
 
+use crate::insets::Insets;
+
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum MobileEvent {
@@ -28,6 +30,8 @@ pub enum MobileEvent {
     /// it from `AndroidApp::config()`.
     ConfigChanged,
     LowMemory,
+    /// System bars / cutout / IME moved. Only the newest report per tick.
+    Insets(Insets),
     /// The activity is being destroyed; the loop returns after this.
     Destroy,
 }

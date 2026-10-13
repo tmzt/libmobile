@@ -19,6 +19,7 @@
 //! [`Mailbox`](crate::mailbox::Mailbox), so no Java thread ever touches app
 //! state.
 
+mod insets;
 pub mod surface;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.
@@ -117,7 +118,9 @@ fn map_main_event(event: &MainEvent<'_>) -> Option<MobileEvent> {
 }
 
 fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
-    let _ = (app, handler);
+    if let Some(insets) = insets::take_pending() {
+        handler.event(app, MobileEvent::Insets(insets));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -135,5 +138,6 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 
 /// `android_main` can run more than once per process (the activity is
 /// destroyed and recreated). Queued *commands* from this run must not replay
-/// into the next one, so they are dropped on the way out.
+/// into the next one, so they are dropped on the way out. The safe area is a
+/// current value, not a command, and is kept (see `insets`).
 fn discard_stale_commands() {}

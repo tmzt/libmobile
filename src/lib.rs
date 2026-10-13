@@ -16,9 +16,9 @@
 //!   writes `GeneratedPlugins.kt`, and writes `libmobile.gradle`, which appends
 //!   the staged root to Gradle's `sourceSets` and applies the plugins'
 //!   contributions (AARs, permissions, manifest elements). See [`codegen`].
-//! * **Rust**: platform-free types ([`event`], [`worker`], [`mailbox`]) that
-//!   build and test on any host, and the `android` module (target_os =
-//!   "android") with the JNI bridges and [`android::run`].
+//! * **Rust**: platform-free types ([`insets`], [`event`], [`worker`],
+//!   [`mailbox`]) that build and test on any host, and the `android` module
+//!   (target_os = "android") with the JNI bridges and [`android::run`].
 //!
 //! ## Using it
 //!
@@ -57,6 +57,7 @@
 
 pub mod codegen;
 pub mod event;
+pub mod insets;
 pub mod mailbox;
 pub mod worker;
 
@@ -64,3 +65,4 @@ pub mod worker;
 pub mod android;
 
 pub use event::MobileEvent;
+pub use insets::{Insets, SafeArea};
