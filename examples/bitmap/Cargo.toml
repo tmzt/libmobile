@@ -1,0 +1,24 @@
+[package]
+name = "libmobile-example-bitmap"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "libmobile example: software rendering straight into the ANativeWindow buffer"
+
+[lib]
+# cdylib: the APK's native library (`android.app.lib_name` = this name).
+# lib: so the platform-free scene tests run on the host.
+name = "libmobile_example_bitmap"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+libmobile = { path = "../.." }
+log = "0.4"
+
+# The host copy, for `libmobile::gradle` in build.rs: it writes the whole
+# Gradle project, so this example has no Gradle files of its own.
+[build-dependencies]
+libmobile = { path = "../.." }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"

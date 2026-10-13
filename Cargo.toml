@@ -42,3 +42,6 @@ raw-window-handle = "0.6"
 # Pinned to the same 0.22 android-activity resolves, so there is a single
 # `JavaVM` singleton in the process.
 jni = "0.22"
+
+[workspace]
+members = [".", "examples/bitmap"]
