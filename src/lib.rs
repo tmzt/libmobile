@@ -39,7 +39,9 @@
 //! }
 //! ```
 //!
-//! Gradle side: apply the generated script from the app module:
+//! Gradle side: let the app's `build.rs` generate the whole project
+//! ([`gradle::Project`]), or, in a project of your own, apply the generated
+//! script from the app module:
 //!
 //! ```kotlin
 //! apply(from = "<target>/aarch64-linux-android/release/libmobile-gradle/libmobile.gradle")
@@ -48,7 +50,7 @@
 //! and in that manifest, make the activity `dev.highbay.libmobile.MobileNativeActivity`
 //! (or a subclass) with `android.app.lib_name` naming the app's cdylib and
 //! `android:launchMode="singleTop"` so `onNewIntent` reaches the running
-//! instance. `libmobile.gradle` brings each active plugin's AARs
+//! instance. Either way, `libmobile.gradle` brings each active plugin's AARs
 //! and manifest entries ([`codegen::Contributes`]).
 
 // deny (not forbid): each JNI export needs one scoped `#[allow(unsafe_code)]`
@@ -62,6 +64,7 @@ pub mod auth;
 pub mod camera;
 pub mod codegen;
 pub mod event;
+pub mod gradle;
 pub mod insets;
 pub mod intent;
 pub mod mailbox;
