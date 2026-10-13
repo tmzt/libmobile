@@ -93,6 +93,12 @@ pub const PLUGINS: &[Plugin] = &[
         class: "bridge.IntentPlugin",
         contributes: Contributes::NOTHING,
     },
+    Plugin {
+        feature: None,
+        dir: "bridge",
+        class: "bridge.TextInputPlugin",
+        contributes: Contributes::NOTHING,
+    },
 ];
 
 /// Every feature name the registry knows, deduplicated, in declaration order.
@@ -475,6 +481,15 @@ mod tests {
             active_plugins(&[])
                 .iter()
                 .any(|p| p.class == "bridge.IntentPlugin")
+        );
+    }
+
+    #[test]
+    fn text_input_plugin_is_core() {
+        assert!(
+            active_plugins(&[])
+                .iter()
+                .any(|p| p.class == "bridge.TextInputPlugin")
         );
     }
 

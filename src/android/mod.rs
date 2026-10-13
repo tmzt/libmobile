@@ -23,6 +23,7 @@ mod insets;
 mod intent;
 mod jni_util;
 pub mod surface;
+pub mod text_input;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.
 // through the exact versions libmobile links (one `JavaVM`, one `NativeWindow`).
@@ -31,6 +32,7 @@ pub use android_activity::input::InputEvent;
 pub use android_activity::{AndroidApp, InputStatus};
 pub use ndk;
 pub use surface::SurfaceTarget;
+pub use text_input::set_text_input;
 
 use crate::MobileEvent;
 use android_activity::{MainEvent, PollEvent};
@@ -126,6 +128,9 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for intent in intent::take_pending() {
         handler.event(app, MobileEvent::Intent(intent));
     }
+    for text in text_input::take_pending() {
+        handler.event(app, MobileEvent::TextChanged(text));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -147,4 +152,5 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 /// current value, not a command, and is kept (see `insets`).
 fn discard_stale_commands() {
     let _ = intent::take_pending();
+    let _ = text_input::take_pending();
 }
