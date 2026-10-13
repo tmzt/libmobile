@@ -15,6 +15,9 @@ default = []
 # (android/java/dev/highbay/libmobile/auth, src/android/auth.rs). Also adds the
 # androidx.credentials + googleid AARs to the generated Gradle script.
 google-auth = []
+# Photo capture through the system camera app
+# (android/java/dev/highbay/libmobile/camera, src/android/camera.rs).
+camera = []
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and

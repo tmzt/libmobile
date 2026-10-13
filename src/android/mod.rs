@@ -21,6 +21,8 @@
 
 #[cfg(feature = "google-auth")]
 pub mod auth;
+#[cfg(feature = "camera")]
+pub mod camera;
 mod insets;
 mod intent;
 mod jni_util;
@@ -34,6 +36,8 @@ pub use android_activity::input::InputEvent;
 pub use android_activity::{AndroidApp, InputStatus};
 #[cfg(feature = "google-auth")]
 pub use auth::start_google_login;
+#[cfg(feature = "camera")]
+pub use camera::capture_photo;
 pub use ndk;
 pub use surface::SurfaceTarget;
 pub use text_input::set_text_input;
@@ -139,6 +143,10 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for outcome in auth::take_results() {
         handler.event(app, MobileEvent::GoogleLogin(outcome));
     }
+    #[cfg(feature = "camera")]
+    for outcome in camera::take_results() {
+        handler.event(app, MobileEvent::Capture(outcome));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -163,4 +171,6 @@ fn discard_stale_commands() {
     let _ = text_input::take_pending();
     #[cfg(feature = "google-auth")]
     let _ = auth::take_results();
+    #[cfg(feature = "camera")]
+    let _ = camera::take_results();
 }

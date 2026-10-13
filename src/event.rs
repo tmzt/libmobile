@@ -39,6 +39,8 @@ pub enum MobileEvent {
     TextChanged(String),
     #[cfg(feature = "google-auth")]
     GoogleLogin(crate::auth::LoginOutcome),
+    #[cfg(feature = "camera")]
+    Capture(crate::camera::CaptureOutcome),
     /// The activity is being destroyed; the loop returns after this.
     Destroy,
 }

@@ -58,6 +58,8 @@
 
 #[cfg(feature = "google-auth")]
 pub mod auth;
+#[cfg(feature = "camera")]
+pub mod camera;
 pub mod codegen;
 pub mod event;
 pub mod insets;

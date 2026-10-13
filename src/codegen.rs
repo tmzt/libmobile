@@ -112,6 +112,22 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
+    Plugin {
+        feature: Some("camera"),
+        dir: "camera",
+        class: "camera.CameraPlugin",
+        contributes: Contributes {
+            manifest: &[
+                // Package visibility (API 30+): lets the plugin see that a
+                // camera app exists to hand off to.
+                "<queries><intent><action android:name=\"android.media.action.IMAGE_CAPTURE\" /></intent></queries>",
+                // Optional: the plugin degrades to `no_camera_app`, so Play
+                // must not filter camera-less devices out.
+                "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />",
+            ],
+            ..Contributes::NOTHING
+        },
+    },
 ];
 
 /// Every feature name the registry knows, deduplicated, in declaration order.
@@ -394,7 +410,7 @@ mod tests {
     #[test]
     fn known_features_match_cargo_manifest() {
         // Keep in step with `[features]` in Cargo.toml.
-        assert_eq!(known_features(), vec!["google-auth"]);
+        assert_eq!(known_features(), vec!["google-auth", "camera"]);
     }
 
     #[test]
@@ -518,6 +534,27 @@ mod tests {
                 .contains(&"androidx.credentials:credentials:1.5.0")
         );
         assert!(merged.manifest.is_empty() && merged.permissions.is_empty());
+    }
+
+    #[test]
+    fn camera_plugin_declares_queries_and_optional_feature() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "camera"));
+        let active = active_plugins(&["camera"]);
+        assert!(active.iter().any(|p| p.class == "camera.CameraPlugin"));
+        let merged = merge(&active);
+        assert!(
+            merged
+                .manifest
+                .iter()
+                .any(|x| x.contains("android.media.action.IMAGE_CAPTURE"))
+        );
+        assert!(
+            merged
+                .manifest
+                .iter()
+                .any(|x| x.contains("android:required=\"false\""))
+        );
+        assert!(merged.permissions.is_empty());
     }
 
     #[test]
