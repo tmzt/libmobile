@@ -20,6 +20,8 @@
 //! state.
 
 mod insets;
+mod intent;
+mod jni_util;
 pub mod surface;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.
@@ -121,6 +123,9 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     if let Some(insets) = insets::take_pending() {
         handler.event(app, MobileEvent::Insets(insets));
     }
+    for intent in intent::take_pending() {
+        handler.event(app, MobileEvent::Intent(intent));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -140,4 +145,6 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 /// destroyed and recreated). Queued *commands* from this run must not replay
 /// into the next one, so they are dropped on the way out. The safe area is a
 /// current value, not a command, and is kept (see `insets`).
-fn discard_stale_commands() {}
+fn discard_stale_commands() {
+    let _ = intent::take_pending();
+}

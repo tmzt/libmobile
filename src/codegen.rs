@@ -80,12 +80,20 @@ impl Plugin {
 
 /// Every plugin the crate ships, in dispatch order. Core bridges come first so
 /// a feature plugin's `onCreate` can rely on insets/intents already being wired.
-pub const PLUGINS: &[Plugin] = &[Plugin {
-    feature: None,
-    dir: "bridge",
-    class: "bridge.WindowInsetsPlugin",
-    contributes: Contributes::NOTHING,
-}];
+pub const PLUGINS: &[Plugin] = &[
+    Plugin {
+        feature: None,
+        dir: "bridge",
+        class: "bridge.WindowInsetsPlugin",
+        contributes: Contributes::NOTHING,
+    },
+    Plugin {
+        feature: None,
+        dir: "bridge",
+        class: "bridge.IntentPlugin",
+        contributes: Contributes::NOTHING,
+    },
+];
 
 /// Every feature name the registry knows, deduplicated, in declaration order.
 pub fn known_features() -> Vec<&'static str> {
@@ -458,6 +466,15 @@ mod tests {
             active_plugins(&[])
                 .iter()
                 .any(|p| p.class == "bridge.WindowInsetsPlugin")
+        );
+    }
+
+    #[test]
+    fn intent_plugin_is_core() {
+        assert!(
+            active_plugins(&[])
+                .iter()
+                .any(|p| p.class == "bridge.IntentPlugin")
         );
     }
 

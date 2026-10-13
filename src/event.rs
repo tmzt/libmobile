@@ -7,6 +7,7 @@
 //! [`MobileEvent::WindowCreated`].
 
 use crate::insets::Insets;
+use crate::intent::IntentData;
 
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -32,6 +33,8 @@ pub enum MobileEvent {
     LowMemory,
     /// System bars / cutout / IME moved. Only the newest report per tick.
     Insets(Insets),
+    /// The launch intent, or a later one via `onNewIntent`.
+    Intent(IntentData),
     /// The activity is being destroyed; the loop returns after this.
     Destroy,
 }
