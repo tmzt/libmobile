@@ -1,0 +1,25 @@
+[package]
+name = "libmobile-example-wgpu"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "libmobile example: a full-screen WGSL shader through wgpu, inset- and touch-aware"
+
+[lib]
+name = "libmobile_example_wgpu"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+libmobile = { path = "../.." }
+log = "0.4"
+
+# The host copy, for `libmobile::gradle` in build.rs.
+[build-dependencies]
+libmobile = { path = "../.." }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+# Default features: Vulkan + GLES; wgpu picks (Vulkan on any recent device).
+wgpu = "29"
+# Blocking waits for wgpu's two async bring-up calls on the main thread.
+pollster = "0.4"

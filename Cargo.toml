@@ -44,4 +44,4 @@ raw-window-handle = "0.6"
 jni = "0.22"
 
 [workspace]
-members = [".", "examples/bitmap"]
+members = [".", "examples/bitmap", "examples/wgpu"]
