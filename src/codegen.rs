@@ -1,0 +1,455 @@
+//! **The compile-time plugin registry and everything rendered from it.**
+//!
+//! There is no runtime plugin discovery (no `ServiceLoader`, no reflection):
+//! which Kotlin plugins the APK carries is decided by the Cargo features this
+//! crate was built with, and `build.rs` writes that decision down as source
+//! before Gradle ever runs.
+//!
+//! Each [`Plugin`] declares, next to its Kotlin class, what it
+//! [`Contributes`] to the app: AARs, `uses-permission`s, other manifest
+//! elements. The active plugins' contributions are merged and rendered into:
+//!
+//! * `GeneratedPlugins.kt` — `GeneratedPlugins.activePlugins`, the list
+//!   `MobileNativeActivity` dispatches every lifecycle hook to.
+//! * `libmobile.gradle` — a Groovy script the app module `apply`s. It appends
+//!   the staged Kotlin root to `android.sourceSets.main`, adds the AARs, and
+//!   splices the manifest contributions into the app's *merged* manifest
+//!   (AGP's `MERGED_MANIFEST` transform), so they reach a hand-written
+//!   project exactly as they reach a generated one.
+//!
+//! This module is std-only on purpose: `build.rs` compiles it directly
+//! (`#[path = "src/codegen.rs"]`), and the crate compiles it again so the
+//! rendering is unit-tested like any other code. Nothing here touches the
+//! filesystem.
+
+use std::path::Path;
+
+/// The root Android package; every Kotlin source lives under it.
+pub const PACKAGE: &str = "dev.highbay.libmobile";
+
+/// The Kotlin source tree, relative to the crate root.
+pub const KOTLIN_ROOT: &str = "android/java";
+
+/// The package's directory under [`KOTLIN_ROOT`].
+pub const PACKAGE_DIR: &str = "dev/highbay/libmobile";
+
+/// What a plugin adds to the app beyond its Kotlin sources.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Contributes {
+    /// Maven coordinates for the app's `implementation` dependencies.
+    pub dependencies: &'static [&'static str],
+    /// `<uses-permission android:name=...>` names.
+    pub permissions: &'static [&'static str],
+    /// Raw XML elements for directly inside `<manifest>` (`<queries>`,
+    /// `<uses-feature>`...).
+    pub manifest: &'static [&'static str],
+    /// Raw XML elements for directly inside `<application>` (`<provider>`,
+    /// `<meta-data>`...).
+    pub application: &'static [&'static str],
+}
+
+impl Contributes {
+    pub const NOTHING: Contributes = Contributes {
+        dependencies: &[],
+        permissions: &[],
+        manifest: &[],
+        application: &[],
+    };
+}
+
+/// One Kotlin `MobileActivityPlugin` object, the feature that gates it, and
+/// what it contributes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Plugin {
+    /// `None` for the core bridges every APK carries.
+    pub feature: Option<&'static str>,
+    /// Subdirectory of [`PACKAGE_DIR`] holding the plugin's sources; the whole
+    /// directory is staged when the plugin is active.
+    pub dir: &'static str,
+    /// Class name relative to [`PACKAGE`].
+    pub class: &'static str,
+    pub contributes: Contributes,
+}
+
+impl Plugin {
+    /// Fully-qualified Kotlin name.
+    pub fn qualified(&self) -> String {
+        format!("{PACKAGE}.{}", self.class)
+    }
+}
+
+/// Every plugin the crate ships, in dispatch order. Core bridges come first so
+/// a feature plugin's `onCreate` can rely on insets/intents already being wired.
+pub const PLUGINS: &[Plugin] = &[];
+
+/// Every feature name the registry knows, deduplicated, in declaration order.
+pub fn known_features() -> Vec<&'static str> {
+    features_in(PLUGINS)
+}
+
+/// The plugins `enabled` selects, in [`PLUGINS`] order.
+pub fn active_plugins(enabled: &[&str]) -> Vec<Plugin> {
+    active_in(PLUGINS, enabled)
+}
+
+fn features_in(table: &[Plugin]) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for feature in table.iter().filter_map(|p| p.feature) {
+        if !out.contains(&feature) {
+            out.push(feature);
+        }
+    }
+    out
+}
+
+fn active_in(table: &[Plugin], enabled: &[&str]) -> Vec<Plugin> {
+    table
+        .iter()
+        .filter(|p| p.feature.is_none_or(|f| enabled.contains(&f)))
+        .copied()
+        .collect()
+}
+
+/// The subdirectories of [`PACKAGE_DIR`] to stage, deduplicated, in order.
+/// (The package's top-level files — the activity and the plugin interface —
+/// are always staged and are not listed here.)
+pub fn source_dirs(active: &[Plugin]) -> Vec<&'static str> {
+    let mut dirs: Vec<&'static str> = Vec::new();
+    for plugin in active {
+        if !dirs.contains(&plugin.dir) {
+            dirs.push(plugin.dir);
+        }
+    }
+    dirs
+}
+
+/// The active plugins' contributions, each list deduplicated in plugin order.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Merged {
+    pub dependencies: Vec<&'static str>,
+    pub permissions: Vec<&'static str>,
+    pub manifest: Vec<&'static str>,
+    pub application: Vec<&'static str>,
+}
+
+pub fn merge(active: &[Plugin]) -> Merged {
+    fn add(into: &mut Vec<&'static str>, items: &[&'static str]) {
+        for item in items {
+            if !into.contains(item) {
+                into.push(item);
+            }
+        }
+    }
+    let mut merged = Merged::default();
+    for plugin in active {
+        let c = &plugin.contributes;
+        add(&mut merged.dependencies, c.dependencies);
+        add(&mut merged.permissions, c.permissions);
+        add(&mut merged.manifest, c.manifest);
+        add(&mut merged.application, c.application);
+    }
+    merged
+}
+
+fn feature_line(enabled: &[&str]) -> String {
+    if enabled.is_empty() {
+        "<none>".to_string()
+    } else {
+        enabled.join(", ")
+    }
+}
+
+/// Render `GeneratedPlugins.kt`.
+pub fn generated_plugins_kt(enabled: &[&str], active: &[Plugin]) -> String {
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED by libmobile's build.rs from the active Cargo features. Do not edit.\n",
+    );
+    out.push_str(&format!("// features: {}\n", feature_line(enabled)));
+    out.push_str(&format!("package {PACKAGE}\n\n"));
+    out.push_str("object GeneratedPlugins {\n");
+    out.push_str("    val activePlugins: List<MobileActivityPlugin> = listOf(\n");
+    for plugin in active {
+        out.push_str(&format!("        {},\n", plugin.qualified()));
+    }
+    out.push_str("    )\n}\n");
+    out
+}
+
+/// A Groovy single-quoted string literal.
+fn groovy_str(raw: &str) -> String {
+    format!(
+        "'{}'",
+        raw.replace('\\', "\\\\")
+            .replace('\'', "\\'")
+            .replace('\n', "\\n")
+    )
+}
+
+fn groovy_path(path: &Path) -> String {
+    groovy_str(&path.to_string_lossy().replace('\\', "/"))
+}
+
+fn groovy_list(items: &[String]) -> String {
+    format!("[{}]", items.join(", "))
+}
+
+/// The Groovy half of the manifest contribution: a `MERGED_MANIFEST`
+/// transform that splices XML into the app's merged manifest. A script
+/// applied with `apply(from = ...)` cannot see AGP's classes by name, so the
+/// artifact type is looked up through the variant's own class loader.
+const MANIFEST_TRANSFORM: &str = r#"
+abstract class LibmobileManifestTask extends DefaultTask {
+    @InputFile abstract RegularFileProperty getMergedManifest()
+    @OutputFile abstract RegularFileProperty getUpdatedManifest()
+    @Input abstract ListProperty<String> getPermissions()
+    @Input abstract ListProperty<String> getManifestXml()
+    @Input abstract ListProperty<String> getApplicationXml()
+
+    @TaskAction
+    void splice() {
+        def text = mergedManifest.get().asFile.getText('UTF-8')
+        // Permissions the app (or a library) already declares are skipped:
+        // a duplicate would be a second element, not a no-op.
+        def root = permissions.get()
+            .findAll { !(text =~ /<uses-permission[^>]*android:name="${java.util.regex.Pattern.quote(it)}"/) }
+            .collect { "    <uses-permission android:name=\"${it}\" />\n" }
+            .join('') + manifestXml.get().collect { "    ${it}\n" }.join('')
+        if (root) {
+            def at = text.indexOf('<application')
+            if (at < 0) throw new GradleException('libmobile: merged manifest has no <application>')
+            text = text.substring(0, at) + root.trim() + '\n\n    ' + text.substring(at)
+        }
+        def app = applicationXml.get().collect { "        ${it}\n" }.join('')
+        if (app) {
+            def at = text.lastIndexOf('</application>')
+            if (at < 0) throw new GradleException('libmobile: merged manifest has no </application>')
+            text = text.substring(0, at) + app.trim() + '\n    ' + text.substring(at)
+        }
+        updatedManifest.get().asFile.write(text, 'UTF-8')
+    }
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        def task = project.tasks.register("libmobile${variant.name.capitalize()}Manifest", LibmobileManifestTask) {
+            permissions.set(LIBMOBILE_PERMISSIONS)
+            manifestXml.set(LIBMOBILE_MANIFEST_XML)
+            applicationXml.set(LIBMOBILE_APPLICATION_XML)
+        }
+        def mergedManifest = variant.artifacts.getClass().classLoader
+            .loadClass('com.android.build.api.artifact.SingleArtifact$MERGED_MANIFEST').INSTANCE
+        variant.artifacts.use(task)
+            .wiredWithFiles({ it.mergedManifest }, { it.updatedManifest })
+            .toTransform(mergedManifest)
+    }
+}
+"#;
+
+/// Render `libmobile.gradle`, which the app module `apply`s.
+///
+/// Groovy rather than Kotlin script on purpose: an `apply(from = ...)`'d `.kts`
+/// script gets no type-safe accessors for the `android {}` extension, while
+/// Groovy resolves it dynamically — so the generated file needs no knowledge
+/// of the AGP version it lands in.
+pub fn gradle_script(enabled: &[&str], kotlin_src: &Path, merged: &Merged) -> String {
+    let quoted = |items: &[&str]| -> String {
+        groovy_list(&items.iter().map(|s| groovy_str(s)).collect::<Vec<_>>())
+    };
+    let mut out = String::new();
+    out.push_str(
+        "// GENERATED by libmobile's build.rs from the active Cargo features. Do not edit.\n",
+    );
+    out.push_str(&format!("// features: {}\n", feature_line(enabled)));
+    out.push_str("//\n// Apply from the app module, after the Android plugin:\n");
+    out.push_str("//   apply(from = \"<this file>\")\n\n");
+
+    // Both: AGP 9's built-in Kotlin compiles only `kotlin` source dirs, and
+    // `java` keeps the root visible to tooling that reads only that set.
+    let root = groovy_path(kotlin_src);
+    out.push_str("android {\n    sourceSets {\n        main {\n");
+    out.push_str(&format!("            java.srcDir {root}\n"));
+    out.push_str(&format!("            kotlin.srcDir {root}\n"));
+    out.push_str("        }\n    }\n}\n");
+
+    if !merged.dependencies.is_empty() {
+        out.push_str("\ndependencies {\n");
+        for coordinate in &merged.dependencies {
+            out.push_str(&format!("    implementation {}\n", groovy_str(coordinate)));
+        }
+        out.push_str("}\n");
+    }
+
+    if !(merged.permissions.is_empty()
+        && merged.manifest.is_empty()
+        && merged.application.is_empty())
+    {
+        out.push_str("\n// Manifest contributions of the active plugins.\n");
+        out.push_str(&format!(
+            "ext.LIBMOBILE_PERMISSIONS = {}\n",
+            quoted(&merged.permissions)
+        ));
+        out.push_str(&format!(
+            "ext.LIBMOBILE_MANIFEST_XML = {}\n",
+            quoted(&merged.manifest)
+        ));
+        out.push_str(&format!(
+            "ext.LIBMOBILE_APPLICATION_XML = {}\n",
+            quoted(&merged.application)
+        ));
+        out.push_str(MANIFEST_TRANSFORM);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CORE: Plugin = Plugin {
+        feature: None,
+        dir: "bridge",
+        class: "bridge.Core",
+        contributes: Contributes::NOTHING,
+    };
+    const AARS: Plugin = Plugin {
+        feature: Some("aars"),
+        dir: "aars",
+        class: "aars.Aars",
+        contributes: Contributes {
+            dependencies: &["g:a:1"],
+            ..Contributes::NOTHING
+        },
+    };
+    const MANIFEST: Plugin = Plugin {
+        feature: Some("manifest"),
+        dir: "manifest",
+        class: "manifest.Manifest",
+        contributes: Contributes {
+            permissions: &["android.permission.X"],
+            manifest: &["<uses-feature android:name=\"f\" />"],
+            ..Contributes::NOTHING
+        },
+    };
+    const TABLE: &[Plugin] = &[CORE, AARS, MANIFEST];
+
+    #[test]
+    fn features_select_plugins_in_table_order() {
+        let classes = |enabled: &[&str]| -> Vec<&str> {
+            active_in(TABLE, enabled).iter().map(|p| p.class).collect()
+        };
+        assert_eq!(classes(&[]), vec!["bridge.Core"]);
+        assert_eq!(
+            classes(&["manifest", "aars"]),
+            vec!["bridge.Core", "aars.Aars", "manifest.Manifest"]
+        );
+        assert_eq!(classes(&["unknown"]), vec!["bridge.Core"]);
+        assert_eq!(features_in(TABLE), vec!["aars", "manifest"]);
+        assert_eq!(
+            source_dirs(&active_in(TABLE, &["aars"])),
+            vec!["bridge", "aars"]
+        );
+    }
+
+    #[test]
+    fn core_plugins_come_before_feature_plugins() {
+        let first_feature = PLUGINS.iter().position(|p| p.feature.is_some());
+        if let Some(i) = first_feature {
+            assert!(PLUGINS[i..].iter().all(|p| p.feature.is_some()));
+        }
+    }
+
+    #[test]
+    fn known_features_match_cargo_manifest() {
+        // Keep in step with `[features]` in Cargo.toml.
+        assert_eq!(known_features(), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn merge_dedups_in_plugin_order() {
+        const A: Plugin = Plugin {
+            feature: None,
+            dir: "a",
+            class: "a.A",
+            contributes: Contributes {
+                permissions: &["P1", "P2"],
+                dependencies: &["d:1"],
+                ..Contributes::NOTHING
+            },
+        };
+        const B: Plugin = Plugin {
+            feature: None,
+            dir: "b",
+            class: "b.B",
+            contributes: Contributes {
+                permissions: &["P2", "P3"],
+                application: &["<meta-data />"],
+                ..Contributes::NOTHING
+            },
+        };
+        let merged = merge(&[A, B]);
+        assert_eq!(merged.permissions, vec!["P1", "P2", "P3"]);
+        assert_eq!(merged.dependencies, vec!["d:1"]);
+        assert_eq!(merged.application, vec!["<meta-data />"]);
+    }
+
+    #[test]
+    fn generated_plugins_kt_lists_qualified_objects() {
+        let enabled = ["aars"];
+        let kt = generated_plugins_kt(&enabled, &active_in(TABLE, &enabled));
+        assert!(kt.starts_with("// GENERATED"));
+        assert!(kt.contains("// features: aars\n"));
+        assert!(kt.contains("package dev.highbay.libmobile\n"));
+        assert!(kt.contains("val activePlugins: List<MobileActivityPlugin> = listOf(\n"));
+        assert!(kt.contains("        dev.highbay.libmobile.bridge.Core,\n"));
+        assert!(kt.contains("        dev.highbay.libmobile.aars.Aars,\n"));
+        assert!(!kt.contains("Manifest"));
+    }
+
+    #[test]
+    fn gradle_script_adds_source_root_and_aars() {
+        let enabled = ["aars"];
+        let script = gradle_script(
+            &enabled,
+            Path::new("/t/out/java"),
+            &merge(&active_in(TABLE, &enabled)),
+        );
+        assert!(script.contains("java.srcDir '/t/out/java'\n"));
+        assert!(script.contains("kotlin.srcDir '/t/out/java'\n"));
+        assert!(script.contains("dependencies {\n    implementation 'g:a:1'\n}\n"));
+        // No manifest contributions: no transform at all.
+        assert!(!script.contains("MERGED_MANIFEST"));
+    }
+
+    #[test]
+    fn gradle_script_splices_manifest_contributions() {
+        let enabled = ["manifest"];
+        let script = gradle_script(
+            &enabled,
+            Path::new("/t/java"),
+            &merge(&active_in(TABLE, &enabled)),
+        );
+        assert!(script.contains("ext.LIBMOBILE_PERMISSIONS = ['android.permission.X']\n"));
+        assert!(
+            script
+                .contains("ext.LIBMOBILE_MANIFEST_XML = ['<uses-feature android:name=\"f\" />']\n")
+        );
+        assert!(script.contains("ext.LIBMOBILE_APPLICATION_XML = []\n"));
+        assert!(script.contains("SingleArtifact$MERGED_MANIFEST"));
+        assert!(!script.contains("dependencies {"));
+    }
+
+    #[test]
+    fn gradle_script_without_contributions_is_sources_only() {
+        let script = gradle_script(&[], Path::new("/t/java"), &Merged::default());
+        assert!(script.contains("// features: <none>\n"));
+        assert!(!script.contains("dependencies"));
+        assert!(!script.contains("MERGED_MANIFEST"));
+    }
+
+    #[test]
+    fn groovy_strings_are_escaped() {
+        assert_eq!(groovy_path(Path::new(r"C:\a'b")), r"'C:/a\'b'");
+        assert_eq!(groovy_str("<a b=\"c\"/>"), "'<a b=\"c\"/>'");
+    }
+}

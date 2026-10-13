@@ -1,0 +1,33 @@
+[package]
+name = "libmobile"
+version = "0.1.0"
+edition = "2024"
+description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
+license = "MIT OR Apache-2.0"
+build = "build.rs"
+# The Kotlin sources ship with the crate: build.rs stages the ones the active
+# features select into the Gradle handoff directory.
+include = ["src/**", "android/java/**", "build.rs", "Cargo.toml"]
+
+[features]
+default = []
+
+[lib]
+# An rlib: the consuming app's own crate is the cdylib (`android_main`), and
+# this crate's `Java_dev_highbay_libmobile_*` JNI exports are linked into it.
+crate-type = ["lib"]
+
+[dependencies]
+log = "0.4"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android-activity = { version = "0.6", features = ["native-activity"] }
+# Not a direct API dependency: turns ON ndk's `rwh_06` feature, which is what
+# implements `raw_window_handle::HasWindowHandle` for `NativeWindow` and lets
+# `surface::SurfaceTarget` hand a renderer a safe window handle.
+# android-activity itself depends on ndk with `default-features = false`.
+ndk = { version = "0.9", default-features = false, features = ["nativewindow", "rwh_06"] }
+raw-window-handle = "0.6"
+# Pinned to the same 0.22 android-activity resolves, so there is a single
+# `JavaVM` singleton in the process.
+jni = "0.22"
