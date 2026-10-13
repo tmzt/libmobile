@@ -11,6 +11,10 @@ include = ["src/**", "android/java/**", "build.rs", "Cargo.toml"]
 
 [features]
 default = []
+# Native Sign in with Google over Credential Manager
+# (android/java/dev/highbay/libmobile/auth, src/android/auth.rs). Also adds the
+# androidx.credentials + googleid AARs to the generated Gradle script.
+google-auth = []
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and

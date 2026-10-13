@@ -37,6 +37,8 @@ pub enum MobileEvent {
     Intent(IntentData),
     /// The hidden `InputConnection` field's full text after an IME edit.
     TextChanged(String),
+    #[cfg(feature = "google-auth")]
+    GoogleLogin(crate::auth::LoginOutcome),
     /// The activity is being destroyed; the loop returns after this.
     Destroy,
 }

@@ -99,6 +99,19 @@ pub const PLUGINS: &[Plugin] = &[
         class: "bridge.TextInputPlugin",
         contributes: Contributes::NOTHING,
     },
+    Plugin {
+        feature: Some("google-auth"),
+        dir: "auth",
+        class: "auth.GoogleAuthPlugin",
+        contributes: Contributes {
+            dependencies: &[
+                "androidx.credentials:credentials:1.5.0",
+                "androidx.credentials:credentials-play-services-auth:1.5.0",
+                "com.google.android.libraries.identity.googleid:googleid:1.2.0",
+            ],
+            ..Contributes::NOTHING
+        },
+    },
 ];
 
 /// Every feature name the registry knows, deduplicated, in declaration order.
@@ -381,7 +394,7 @@ mod tests {
     #[test]
     fn known_features_match_cargo_manifest() {
         // Keep in step with `[features]` in Cargo.toml.
-        assert_eq!(known_features(), Vec::<&str>::new());
+        assert_eq!(known_features(), vec!["google-auth"]);
     }
 
     #[test]
@@ -491,6 +504,20 @@ mod tests {
                 .iter()
                 .any(|p| p.class == "bridge.TextInputPlugin")
         );
+    }
+
+    #[test]
+    fn google_auth_plugin_brings_credential_manager() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "auth"));
+        let active = active_plugins(&["google-auth"]);
+        assert!(active.iter().any(|p| p.class == "auth.GoogleAuthPlugin"));
+        let merged = merge(&active);
+        assert!(
+            merged
+                .dependencies
+                .contains(&"androidx.credentials:credentials:1.5.0")
+        );
+        assert!(merged.manifest.is_empty() && merged.permissions.is_empty());
     }
 
     #[test]

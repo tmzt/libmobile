@@ -19,6 +19,8 @@
 //! [`Mailbox`](crate::mailbox::Mailbox), so no Java thread ever touches app
 //! state.
 
+#[cfg(feature = "google-auth")]
+pub mod auth;
 mod insets;
 mod intent;
 mod jni_util;
@@ -30,6 +32,8 @@ pub mod text_input;
 pub use android_activity;
 pub use android_activity::input::InputEvent;
 pub use android_activity::{AndroidApp, InputStatus};
+#[cfg(feature = "google-auth")]
+pub use auth::start_google_login;
 pub use ndk;
 pub use surface::SurfaceTarget;
 pub use text_input::set_text_input;
@@ -131,6 +135,10 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for text in text_input::take_pending() {
         handler.event(app, MobileEvent::TextChanged(text));
     }
+    #[cfg(feature = "google-auth")]
+    for outcome in auth::take_results() {
+        handler.event(app, MobileEvent::GoogleLogin(outcome));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -153,4 +161,6 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 fn discard_stale_commands() {
     let _ = intent::take_pending();
     let _ = text_input::take_pending();
+    #[cfg(feature = "google-auth")]
+    let _ = auth::take_results();
 }

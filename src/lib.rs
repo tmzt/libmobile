@@ -56,6 +56,8 @@
 // the activity reference android-activity owns. Everything else is safe.
 #![deny(unsafe_code)]
 
+#[cfg(feature = "google-auth")]
+pub mod auth;
 pub mod codegen;
 pub mod event;
 pub mod insets;
