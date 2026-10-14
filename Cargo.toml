@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
 build = "build.rs"
 # Not a native library: `links` is what lets this build script hand the
 # staged Kotlin root and `libmobile.gradle` to the app's build script as
@@ -11,7 +12,15 @@ build = "build.rs"
 links = "libmobile"
 # The Kotlin sources ship with the crate: build.rs stages the ones the active
 # features select into the Gradle handoff directory.
-include = ["src/**", "android/java/**", "build.rs", "Cargo.toml"]
+include = [
+    "src/**",
+    "android/java/**",
+    "build.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+]
 
 [features]
 default = []
