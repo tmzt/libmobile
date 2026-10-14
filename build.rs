@@ -75,8 +75,9 @@ fn main() {
     println!("cargo:rustc-env=LIBMOBILE_GRADLE_DIR={}", handoff.display());
     // `links` metadata: the app's build script reads these as
     // `DEP_LIBMOBILE_GRADLE_SCRIPT` / `DEP_LIBMOBILE_FEATURES`
-    // (`libmobile::gradle`). The OUT_DIR copy, not the stable one: it belongs
-    // to exactly this feature set.
+    // (`libmobile::gradle`; keep in step with `gradle::METADATA_KEYS`), or a
+    // wrapper crate republishes them with `gradle::forward_metadata`. The
+    // OUT_DIR copy, not the stable one: it belongs to exactly this feature set.
     println!(
         "cargo:gradle_script={}",
         out_dir.join("libmobile.gradle").display()

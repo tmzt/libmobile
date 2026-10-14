@@ -160,6 +160,31 @@ set `android:launchMode="singleTop"` so `onNewIntent` reaches the running
 instance. Plugin permissions and manifest entries are still merged in by
 `libmobile.gradle`.
 
+### Gradle: through a wrapper crate
+
+Cargo hands libmobile's `links` metadata (`DEP_LIBMOBILE_GRADLE_SCRIPT`) only
+to crates that depend on libmobile directly. A crate that wraps libmobile
+declares its own `links` key and republishes the metadata from its build
+script:
+
+```rust
+// the wrapper's build.rs (libmobile is also one of its build-dependencies)
+fn main() {
+    libmobile::gradle::forward_metadata();
+}
+```
+
+The app then depends on the wrapper alone. It keeps libmobile only as a
+build-dependency, and reads the wrapper's key:
+
+```rust
+// the app's build.rs
+libmobile::gradle::Project::new("com.example.app")
+    .env_prefix("libmorph") // the wrapper's `links`: DEP_LIBMORPH_GRADLE_SCRIPT
+    .generate()
+    .expect("gradle project");
+```
+
 ## Examples
 
 Both examples have no Gradle files of their own: each one's `build.rs` generates
