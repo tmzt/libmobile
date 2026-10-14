@@ -44,6 +44,7 @@ pub use text_input::set_text_input;
 
 use crate::MobileEvent;
 use android_activity::{MainEvent, PollEvent};
+use jni::{jni_sig, jni_str};
 use std::time::Duration;
 
 /// Poll timeout when the app does not ask for another.
@@ -71,6 +72,20 @@ pub trait MobileApp {
     /// right for an app with no background work to drain.
     fn poll_timeout(&self) -> Option<Duration> {
         Some(DEFAULT_POLL_TIMEOUT)
+    }
+}
+
+/// Ask the activity to finish (`Activity.finish()`), as the system Back
+/// action would. The normal teardown follows through [`run`]: `Pause`,
+/// `Stop`, `WindowDestroyed`, then `Destroy`, after which the loop returns.
+/// Callable from the `android_main` thread; a failure is logged.
+pub fn finish(app: &AndroidApp) {
+    let result = jni_util::with_activity(app, |env, activity| {
+        env.call_method(activity, jni_str!("finish"), jni_sig!("()V"), &[])?;
+        Ok(())
+    });
+    if let Err(err) = result {
+        log::error!("libmobile: finishing the activity failed: {err}");
     }
 }
 

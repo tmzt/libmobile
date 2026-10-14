@@ -8,10 +8,6 @@ use jni::{Env, jni_sig, jni_str};
 /// Attach this thread to the VM and run `f` with the activity and the
 /// libmobile class `class_name` (dotted `ClassLoader.loadClass` form).
 ///
-/// `activity_as_ptr` hands back an *unowned* JNI global reference to the
-/// activity; `as_cast_raw` borrows it without taking ownership (so nothing
-/// ever deletes it) and type-checks it at runtime.
-///
 /// **The class is resolved through `Context.getClassLoader()`, not
 /// `FindClass`.** `android_main` runs on a thread the native glue created and
 /// attached, so JNI resolves names there against the *system* class loader,
@@ -19,22 +15,15 @@ use jni::{Env, jni_sig, jni_str};
 /// `ClassNotFoundException`. It must be the `Context` method (the app's
 /// loader from the LoadedApk) and not `getClass().getClassLoader()`, which for
 /// a framework-loaded activity class is the boot loader and fails the same way.
-#[allow(unsafe_code)] // Scoped: one documented `as_cast_raw` on a pointer android-activity owns.
 pub(crate) fn with_app_class<R>(
     app: &AndroidApp,
     class_name: &str,
     f: impl FnOnce(&mut Env<'_>, &JObject<'_>, &JClass<'_>) -> jni::errors::Result<R>,
 ) -> jni::errors::Result<R> {
-    let vm = jni::JavaVM::singleton()?;
-    let raw_activity: jobject = app.activity_as_ptr().cast();
-    vm.attach_current_thread(|env: &mut Env| {
-        // SAFETY: `raw_activity` is a live JNI global reference owned by
-        // `AndroidApp`, which outlives this call; `Cast` borrows it without
-        // taking ownership, so it is never deleted here.
-        let activity = unsafe { env.as_cast_raw::<Global<JObject>>(&raw_activity)? };
+    with_activity(app, |env, activity| {
         let loader = env
             .call_method(
-                &*activity,
+                activity,
                 jni_str!("getClassLoader"),
                 jni_sig!("()Ljava/lang/ClassLoader;"),
                 &[],
@@ -50,7 +39,28 @@ pub(crate) fn with_app_class<R>(
             )?
             .l()?;
         let class = env.cast_local::<JClass>(loaded)?;
-        f(env, &activity, &class)
+        f(env, activity, &class)
+    })
+}
+
+/// Attach this thread to the VM and run `f` with the activity.
+///
+/// `activity_as_ptr` hands back an *unowned* JNI global reference to the
+/// activity; `as_cast_raw` borrows it without taking ownership (so nothing
+/// ever deletes it) and type-checks it at runtime.
+#[allow(unsafe_code)] // Scoped: one documented `as_cast_raw` on a pointer android-activity owns.
+pub(crate) fn with_activity<R>(
+    app: &AndroidApp,
+    f: impl FnOnce(&mut Env<'_>, &JObject<'_>) -> jni::errors::Result<R>,
+) -> jni::errors::Result<R> {
+    let vm = jni::JavaVM::singleton()?;
+    let raw_activity: jobject = app.activity_as_ptr().cast();
+    vm.attach_current_thread(|env: &mut Env| {
+        // SAFETY: `raw_activity` is a live JNI global reference owned by
+        // `AndroidApp`, which outlives this call; `Cast` borrows it without
+        // taking ownership, so it is never deleted here.
+        let activity = unsafe { env.as_cast_raw::<Global<JObject>>(&raw_activity)? };
+        f(env, &activity)
     })
 }
 
