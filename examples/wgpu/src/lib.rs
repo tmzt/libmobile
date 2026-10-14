@@ -243,6 +243,9 @@ mod app {
         resumed: bool,
         uniforms: Uniforms,
         start: Instant,
+        last_tick: Instant,
+        /// A finger is on the screen.
+        down: bool,
     }
 
     impl WgpuApp {
@@ -297,9 +300,9 @@ mod app {
             match motion.action() {
                 MotionAction::Down | MotionAction::Move | MotionAction::PointerDown => {
                     self.uniforms.touch = [pointer.x(), pointer.y()];
-                    self.uniforms.pressed = 1.0;
+                    self.down = true;
                 }
-                MotionAction::Up | MotionAction::Cancel => self.uniforms.pressed = 0.0,
+                MotionAction::Up | MotionAction::Cancel => self.down = false,
                 _ => {}
             }
             InputStatus::Handled
@@ -309,7 +312,11 @@ mod app {
             if !self.resumed {
                 return;
             }
-            self.uniforms.time = self.start.elapsed().as_secs_f32();
+            let now = Instant::now();
+            let dt = (now - self.last_tick).as_secs_f32().min(0.1);
+            self.last_tick = now;
+            self.uniforms.time = (now - self.start).as_secs_f32();
+            self.uniforms.ease_strength(self.down, dt);
             if let Some(gpu) = self.gpu.as_mut() {
                 gpu.render(&self.uniforms);
             }
@@ -339,6 +346,8 @@ mod app {
                 resumed: false,
                 uniforms: Uniforms::default(),
                 start: Instant::now(),
+                last_tick: Instant::now(),
+                down: false,
             },
         );
     }
