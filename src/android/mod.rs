@@ -30,7 +30,8 @@ pub mod surface;
 pub mod text_input;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.
-// through the exact versions libmobile links (one `JavaVM`, one `NativeWindow`).
+// (and, under `cpal`, cpal's AAudio backend) through the exact versions
+// libmobile links (one `JavaVM`, one `NativeWindow`).
 pub use android_activity;
 pub use android_activity::input::InputEvent;
 pub use android_activity::{AndroidApp, InputStatus};
@@ -38,6 +39,8 @@ pub use android_activity::{AndroidApp, InputStatus};
 pub use auth::start_google_login;
 #[cfg(feature = "camera")]
 pub use camera::capture_photo;
+#[cfg(feature = "cpal")]
+pub use cpal;
 pub use ndk;
 pub use surface::SurfaceTarget;
 pub use text_input::set_text_input;

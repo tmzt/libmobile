@@ -1,7 +1,7 @@
 ---
 title: cpal on Android
 date: 2026-10-16
-status: Draft
+status: In implementation
 covers:
   - An optional `cpal` feature that adds cpal as an Android-only dependency
   - Re-exporting it as `libmobile::android::cpal`, next to
@@ -80,3 +80,9 @@ pub use cpal;
 
 The owner approved this plan (2026-10-16) and asked for it to be
 implemented now.
+
+## Amendment — 2026-10-16 09:11 EDT: Implementation started
+
+Implementation has started, and `status` is now `In implementation`.
+This document is now immutable; it changes only on the owner's explicit
+instruction.

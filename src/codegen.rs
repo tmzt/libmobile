@@ -650,7 +650,8 @@ mod tests {
 
     #[test]
     fn known_features_match_cargo_manifest() {
-        // Keep in step with `[features]` in Cargo.toml.
+        // Keep in step with the Kotlin plugin features in Cargo.toml's
+        // `[features]`; `cpal` has no plugin and is not listed.
         assert_eq!(known_features(), vec!["google-auth", "camera"]);
     }
 

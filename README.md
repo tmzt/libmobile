@@ -53,6 +53,7 @@ examples/
 | _(always)_    | `bridge/*`                 | insets, intents, and text input                             |
 | `google-auth` | `auth/GoogleAuthPlugin`    | `androidx.credentials` and `googleid` AARs; `MobileEvent::GoogleLogin` |
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
+| `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
 
 ## Usage
 
