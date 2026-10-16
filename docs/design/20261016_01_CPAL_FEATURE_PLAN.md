@@ -1,7 +1,7 @@
 ---
 title: cpal on Android
 date: 2026-10-16
-status: In implementation
+status: Implemented
 covers:
   - An optional `cpal` feature that adds cpal as an Android-only dependency
   - Re-exporting it as `libmobile::android::cpal`, next to
@@ -86,3 +86,12 @@ implemented now.
 Implementation has started, and `status` is now `In implementation`.
 This document is now immutable; it changes only on the owner's explicit
 instruction.
+
+## Amendment — 2026-10-16 09:11 EDT: Implemented
+
+Step 1 (feature and re-export) is implemented in commit ee0f098, and its
+**Done when:** holds: `cargo fmt --check`, `cargo clippy --all-targets`
+and `cargo test` pass on the host; `cargo clippy --target
+aarch64-linux-android -p libmobile` passes with and without
+`--features cpal`; `Cargo.lock` has one `ndk` (0.9.0) and one `jni`
+(0.22.4). `status` is now `Implemented`.
