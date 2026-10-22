@@ -115,6 +115,12 @@ pub const PLUGINS: &[Plugin] = &[
         contributes: Contributes::NOTHING,
     },
     Plugin {
+        feature: None,
+        dir: "store",
+        class: "store.SecureStorePlugin",
+        contributes: Contributes::NOTHING,
+    },
+    Plugin {
         feature: Some("google-auth"),
         dir: "auth",
         class: "auth.GoogleAuthPlugin",
@@ -145,9 +151,37 @@ pub const PLUGINS: &[Plugin] = &[
     },
 ];
 
-/// Every feature name the registry knows, deduplicated, in declaration order.
+/// A Cargo feature that only sets a `Boolean` constant in
+/// `GeneratedPlugins.kt`, for core plugins that behave differently under it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Flag {
+    pub feature: &'static str,
+    /// The constant's name.
+    pub constant: &'static str,
+    /// Its value when the feature is on; the opposite when it is off.
+    pub when_enabled: bool,
+}
+
+/// Every flag the crate ships.
+pub const FLAGS: &[Flag] = &[
+    // StrongBox is tried unless the app opts out (`store/SecureStorePlugin.kt`).
+    Flag {
+        feature: "secure-store-no-strongbox",
+        constant: "SECURE_STORE_STRONGBOX",
+        when_enabled: false,
+    },
+];
+
+/// Every feature name the registry knows (plugin features, then flags),
+/// deduplicated, in declaration order.
 pub fn known_features() -> Vec<&'static str> {
-    features_in(PLUGINS)
+    let mut out = features_in(PLUGINS);
+    for flag in FLAGS {
+        if !out.contains(&flag.feature) {
+            out.push(flag.feature);
+        }
+    }
+    out
 }
 
 /// The plugins `enabled` selects, in [`PLUGINS`] order.
@@ -235,7 +269,15 @@ pub fn generated_plugins_kt(enabled: &[&str], active: &[Plugin]) -> String {
     for plugin in active {
         out.push_str(&format!("        {},\n", plugin.qualified()));
     }
-    out.push_str("    )\n}\n");
+    out.push_str("    )\n");
+    for flag in FLAGS {
+        let value = enabled.contains(&flag.feature) == flag.when_enabled;
+        out.push_str(&format!(
+            "\n    const val {}: Boolean = {value}\n",
+            flag.constant
+        ));
+    }
+    out.push_str("}\n");
     out
 }
 
@@ -658,7 +700,28 @@ mod tests {
     fn known_features_match_cargo_manifest() {
         // Keep in step with the Kotlin plugin features in Cargo.toml's
         // `[features]`; `cpal` has no plugin and is not listed.
-        assert_eq!(known_features(), vec!["google-auth", "camera"]);
+        assert_eq!(
+            known_features(),
+            vec!["google-auth", "camera", "secure-store-no-strongbox"]
+        );
+    }
+
+    #[test]
+    fn strongbox_flag_is_on_unless_opted_out() {
+        let kt = generated_plugins_kt(&[], &active_plugins(&[]));
+        assert!(kt.contains("    const val SECURE_STORE_STRONGBOX: Boolean = true\n"));
+        let off = ["secure-store-no-strongbox"];
+        let kt = generated_plugins_kt(&off, &active_plugins(&off));
+        assert!(kt.contains("    const val SECURE_STORE_STRONGBOX: Boolean = false\n"));
+    }
+
+    #[test]
+    fn secure_store_plugin_is_core() {
+        assert!(
+            active_plugins(&[])
+                .iter()
+                .any(|p| p.class == "store.SecureStorePlugin")
+        );
     }
 
     #[test]

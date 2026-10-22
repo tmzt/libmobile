@@ -1,7 +1,7 @@
 ---
 title: Secure blob store backed by Android Keystore
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - A `secure-store` Cargo feature with a Kotlin plugin,
     `store/SecureStorePlugin.kt`
@@ -340,3 +340,27 @@ settles open question 1 per blob instead of for the whole store.
   timer, logging the result).
 - handlr's Noise key stays without the flag, so it can reconnect in the
   background while the phone is locked.
+
+## Amendment — 2026-10-22 18:39 EDT: implementation has started; the document is now immutable
+
+The owner asked for this to be implemented (2026-10-22, "implement it"),
+on the `secure-store` branch in its own worktree. Steps 1 to 3 are built
+in this commit. Step 4's example is in the next one. On the owner's Galaxy
+S23 Ultra (API 36):
+
+- The key is in `StrongBox` by default, and in `TrustedEnvironment` with
+  `secure-store-no-strongbox` after `pm clear`.
+- The counter goes from launch 1 to launch 2 across a force-stop.
+- `counter.blob` is 43 bytes (7 header, 12 IV, 8 ciphertext, 16 tag),
+  mode 0600, with no plaintext.
+- A copy renamed to `unlocked-only.blob` reads as `Corrupt`
+  (`AEADBadTagException`).
+- With bit 0 of its flags set while the device was locked, the copy read
+  as `Locked`: the flag chose the unlocked key, which was refused before
+  decryption.
+- After `pm clear`, counting starts again at 1.
+- With the screen locked, the default blobs were read and written, and
+  `put_with` with `unlocked_only` gave `Locked`.
+
+Not yet checked: reading an `unlocked_only` blob with the device
+unlocked, and getting `Locked` from it after locking again.

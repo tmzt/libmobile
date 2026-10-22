@@ -29,6 +29,7 @@ mod insets;
 mod intent;
 mod jni_util;
 mod permission;
+pub mod secure_store;
 pub mod surface;
 pub mod text_input;
 

@@ -36,6 +36,10 @@ camera = []
 # the API 28 calls for input presets cpal cannot set (libmorph's capture
 # modes); generated projects target API 29.
 cpal = ["dep:cpal", "ndk/audio", "ndk/api-level-28"]
+# Create the secure store's Keystore key in the TEE only, never StrongBox
+# (src/android/secure_store.rs). Negative so that turning off default
+# features cannot turn off a security feature; app crates only.
+secure-store-no-strongbox = []
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and
@@ -59,4 +63,4 @@ jni = "0.22"
 cpal = { version = "0.18.2", optional = true }
 
 [workspace]
-members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture"]
+members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture", "examples/securestore"]
