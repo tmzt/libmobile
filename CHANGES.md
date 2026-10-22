@@ -61,3 +61,11 @@ it. libmorph opens its Android capture stream through it, to set the
 AAudio input preset that cpal cannot (libmorph
 `docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, capture modes). Released
 with 0.1.2; strictly additive.
+
+## 2026-10-22 07:28 EDT — cpal feature: ndk's API 28 calls too
+
+Corrects the entry "cpal feature: ndk's AAudio API" above. ndk 0.9 gates
+`AudioInputPreset` and `AudioStreamBuilder::input_preset` behind its
+`api-level-28` feature, so `cpal` enables `ndk/api-level-28` as well as
+`ndk/audio`. An app on this feature then needs API 28. The projects
+`libmobile::gradle` generates target API 29.
