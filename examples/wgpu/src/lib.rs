@@ -277,6 +277,7 @@ mod app {
     }
 
     const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
+    const CAMERA: &str = "android.permission.CAMERA";
 
     impl MobileApp for WgpuApp {
         fn event(&mut self, app: &AndroidApp, event: MobileEvent) {
@@ -291,7 +292,17 @@ mod app {
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::Permissions(outcome) => {
-                    log::info!("wgpu: permissions {:?}", outcome.permissions);
+                    log::info!(
+                        "wgpu: permissions (request {}) {:?}",
+                        outcome.request.id(),
+                        outcome.permissions
+                    );
+                    for (name, granted) in &outcome.permissions {
+                        if !granted {
+                            let again = libmobile::android::should_show_rationale(app, name);
+                            log::info!("wgpu: {name} denied; asking again shows a dialog: {again}");
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -302,12 +313,16 @@ mod app {
                 return InputStatus::Unhandled;
             };
             let pointer = motion.pointer_at_index(motion.pointer_index());
-            // Shows the runtime permission dialog until the microphone is
-            // granted (the manifest declares it in build.rs).
-            if motion.action() == MotionAction::Down
-                && !libmobile::android::permission_granted(app, RECORD_AUDIO)
-            {
-                libmobile::android::request_permissions(app, &[RECORD_AUDIO]);
+            // Two requests back to back, until both are granted (the manifest
+            // declares them in build.rs): libmobile makes them one after the
+            // other, and each answer carries its request's id.
+            if motion.action() == MotionAction::Down {
+                for permission in [RECORD_AUDIO, CAMERA] {
+                    if !libmobile::android::permission_granted(app, permission) {
+                        let request = libmobile::android::request_permissions(app, &[permission]);
+                        log::info!("wgpu: asked for {permission} (request {})", request.id());
+                    }
+                }
             }
             match motion.action() {
                 MotionAction::Down | MotionAction::Move | MotionAction::PointerDown => {
