@@ -1,7 +1,7 @@
 ---
 title: Key store for adapter-defined keys
 date: 2026-10-22
-status: Draft
+status: Superseded (by libmorph 20261022_05_KEY_STORE_PLAN.md)
 covers:
   - "`SecretKey`, `SealToken`, `KeyHandle`, `KeyOptions` and `KeyStoreError`:
     platform-free types an adapter implements against, so its private key
@@ -296,3 +296,12 @@ section 2, and adds to section 2.1 and to steps 1 and 3.
   - a migration test, where a test adapter's v2 accepts v1, loads a v1
     key, and finds it stored as v2 afterwards;
   - `WrongKind` for a kind that is not accepted.
+
+## Amendment — 2026-10-22 19:55 EDT: superseded by libmorph's key store plan
+
+Superseded by libmorph `docs/design/20261022_05_KEY_STORE_PLAN.md`, which
+specifies the engine (`src/key_store.rs`) libmobile implements first and
+libdevice copies, and libmobile's `AndroidVault` (plugin space 1, as here).
+Nothing in this plan was implemented. The rename of `Locked` to
+`DeviceLocked`, `Jni` to `Platform`, and the `android::SecureStore`
+struct are carried there.
