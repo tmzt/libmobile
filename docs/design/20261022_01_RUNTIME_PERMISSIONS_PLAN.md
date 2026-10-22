@@ -179,3 +179,41 @@ owner's Galaxy S23, the `wgpu` example showed the system dialog
 ("Allow libmobile wgpu to record audio?") and logged
 `permissions [("android.permission.RECORD_AUDIO", true)]` when allowed.
 The denied answer is not yet checked.
+
+## Amendment — 2026-10-22 07:53 EDT: request ids, one request at a time, and the rationale check
+
+On the owner's explicit instruction (2026-10-22, "write it up then
+implement"), after asking whether the camera and other permissions use
+this path. Replaces the signatures in sections 2 and 3, and adds a step 4.
+
+- **Request ids.** `request_permissions` returns a
+  `PermissionRequest`, an opaque `Copy` id (`u32` inside, counting
+  from 1 per process). `PermissionsOutcome` gains
+  `pub request: PermissionRequest` and becomes `#[non_exhaustive]`. A
+  failed JNI call still answers, with its id and every name denied.
+- **One request at a time.** Android shows one permission dialog at a
+  time, and a request made while another is waiting is answered as
+  interrupted. `PermissionPlugin` therefore keeps a queue of
+  `(id, names)`: `request(activity, id, names)` appends to it and starts
+  the head if nothing is in flight. Each result is delivered with the
+  head's id and names, then the next request starts. Every request still
+  gets exactly one answer, in the order made. The Kotlin call becomes
+  `request(Activity, int, String[])`, and the native result
+  `nativePermissionsResult(int, String[], String[], boolean[])`.
+- **Rationale.** `should_show_rationale(app, permission) -> bool` wraps
+  `Activity.shouldShowRequestPermissionRationale`: `true` after the
+  user has denied once, `false` before the first request and once the
+  user has chosen "Don't allow" a second time. After a denial, `false`
+  means a further request will be denied without a dialog, so the app
+  should point to Settings. `false` if the JNI call fails.
+- **Not in this plan.** Permissions granted from Settings rather than a
+  dialog (drawing over other apps, all-files access, exact alarms), a
+  Settings intent, and background location, which Android asks for
+  separately.
+
+4. **Ids, queue and rationale.** As above. The `wgpu` example logs each
+   request's id and its answer's id, and logs the rationale after a
+   denial.
+   **Done when:** `cargo test --workspace` passes, Android clippy is
+   clean, and on the S23 two requests made back to back are answered in
+   order, with their own ids and names.
