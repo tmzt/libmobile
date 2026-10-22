@@ -19,6 +19,8 @@
 //! [`Mailbox`](crate::mailbox::Mailbox), so no Java thread ever touches app
 //! state.
 
+#[cfg(feature = "cpal")]
+pub mod audio_capture;
 #[cfg(feature = "google-auth")]
 pub mod auth;
 #[cfg(feature = "camera")]
@@ -36,6 +38,8 @@ pub mod text_input;
 pub use android_activity;
 pub use android_activity::input::InputEvent;
 pub use android_activity::{AndroidApp, InputStatus};
+#[cfg(feature = "cpal")]
+pub use audio_capture::CaptureStream;
 #[cfg(feature = "google-auth")]
 pub use auth::start_google_login;
 #[cfg(feature = "camera")]

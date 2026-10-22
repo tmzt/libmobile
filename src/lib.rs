@@ -58,6 +58,8 @@
 // the activity reference android-activity owns. Everything else is safe.
 #![deny(unsafe_code)]
 
+#[cfg(feature = "cpal")]
+pub mod audio_capture;
 #[cfg(feature = "google-auth")]
 pub mod auth;
 #[cfg(feature = "camera")]
@@ -73,6 +75,8 @@ pub mod worker;
 #[cfg(target_os = "android")]
 pub mod android;
 
+#[cfg(feature = "cpal")]
+pub use audio_capture::{CaptureError, CaptureFormat, InputPreset};
 pub use event::{MobileEvent, PermissionRequest, PermissionsOutcome};
 pub use insets::{Insets, SafeArea};
 pub use intent::IntentData;

@@ -1,7 +1,7 @@
 ---
 title: Audio capture with input presets
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - A capture stream on AAudio (`android::audio_capture::CaptureStream`),
     with the input preset cpal cannot set, changeable while it runs
@@ -170,3 +170,8 @@ manifest, libmobile's `cpal` feature):
 
 Additive (a feature-gated module, types and examples), released with the
 runtime permissions as 0.1.2.
+
+## Amendment — 2026-10-22 08:07 EDT: implementation has started; the document is now immutable
+
+On the owner's instruction (2026-10-22), on the `runtime-permissions`
+branch. Step 1 is in this commit.
