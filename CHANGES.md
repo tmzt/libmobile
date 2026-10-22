@@ -16,3 +16,16 @@ oldest first under timestamped headings. Entries are never edited.
   `v0.1.0` is added on `21938c4`, the commit that set it.
 - The `cpal` feature (`docs/design/20261016_01_CPAL_FEATURE_PLAN.md`,
   `ee0f098`) is strictly additive, so it is released as 0.1.1.
+
+## 2026-10-22 07:05 EDT — Runtime permission requests
+
+Plan: `docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md` (Draft).
+
+Requested by the owner after libmorph's audiocapture example ran on the
+Galaxy S23 with `RECORD_AUDIO` granted through `adb`, since libmobile
+cannot ask for a permission at runtime. A new core
+`bridge.PermissionPlugin` and an `onRequestPermissionsResult` hook on
+`MobileActivityPlugin` let Rust call
+`android::request_permissions` and `permission_granted`, with the
+answer delivered as `MobileEvent::Permissions`. libmorph's audio capture
+plan depends on it. To be released as 0.1.2 (strictly additive).
