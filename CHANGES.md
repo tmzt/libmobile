@@ -48,3 +48,16 @@ source root (`libmobile.gradle`'s `java.srcDir`) move. Gradle's
 incremental Kotlin compile in the generated project then fails with
 "Unresolved reference 'WindowInsetsPlugin'" (and the other bridges) until
 `gradle clean`. Not fixed here; a fix would belong in its own plan.
+
+## 2026-10-22 07:24 EDT — cpal feature: ndk's AAudio API
+
+Follows `docs/design/20261016_01_CPAL_FEATURE_PLAN.md` (Implemented),
+agreed with the owner in the libmorph session.
+
+The `cpal` feature now enables `ndk/audio` itself, so
+`libmobile::android::ndk::audio` (AAudio) is available whenever cpal is.
+Before, it was enabled only because cpal's own ndk dependency asks for
+it. libmorph opens its Android capture stream through it, to set the
+AAudio input preset that cpal cannot (libmorph
+`docs/design/20261022_01_AUDIO_CAPTURE_PLAN.md`, capture modes). Released
+with 0.1.2; strictly additive.
