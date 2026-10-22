@@ -93,3 +93,20 @@ and the answers arrived in order with their own ids and names. Both were
 allowed; the owner was using the phone at the same time, so the denied
 answer and `should_show_rationale` are not yet checked on a device.
 `PermissionsOutcome::from_result` and `denied` became crate-private.
+
+## 2026-10-22 08:06 EDT — Audio capture with input presets
+
+Plan: `docs/design/20261022_02_AUDIO_CAPTURE_PLAN.md` (Draft), to be
+implemented now on the owner's instruction, before libmorph switches to it.
+
+libmorph had opened AAudio capture streams itself through
+`libmobile::android::ndk` to set the input preset cpal cannot. The owner
+pointed out that this belongs in libmobile, which libmorph wraps. libmobile
+gains `android::CaptureStream` (open with a preset, change it while
+recording, stop and start) and a platform-free `InputPreset`, under the
+`cpal` feature. This revises the cpal plan's "no audio API of its own"
+for the one thing cpal cannot do. A new `audiocapture` example shares the
+`wgpu` example's GPU code and makes its plasma respond to the microphone.
+The `wgpu` example stops asking for permissions it does not use, and the
+permission checks move to the new example. Released with the runtime
+permissions as 0.1.2.
