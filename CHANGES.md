@@ -136,3 +136,14 @@ protected at rest, with no file-based fallback. The proposal is a
 `secure-store` feature that does envelope encryption under an Android
 Keystore AES-256-GCM key, using StrongBox where available, with the
 ciphertext in no-backup storage. Proposed only, awaiting the owner.
+
+## 2026-10-22 19:10 EDT — Key store for adapter-defined keys (proposed)
+
+Plan: `docs/design/20261022_04_KEY_STORE_PLAN.md` (Draft), step 1 of
+libmorph's `20261022_04_OPAQUE_KEYS_PLAN.md`. An adapter defines its
+private key type `K` (implementing `SecretKey`) and its public opaque
+type `P`. The store generates, seals, loads and validates `K`, and hands
+out a `KeyHandle`. Sealing needs a `SealToken` only libmobile can make.
+Keys have their own API and storage (a second space in
+`SecureStorePlugin`), separate from the blob store. libdevice will
+implement the same API on the desktop, and libmorph wraps both.
