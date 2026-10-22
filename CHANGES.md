@@ -110,3 +110,19 @@ for the one thing cpal cannot do. A new `audiocapture` example shares the
 The `wgpu` example stops asking for permissions it does not use, and the
 permission checks move to the new example. Released with the runtime
 permissions as 0.1.2.
+
+## 2026-10-22 08:25 EDT — 0.2.0 released, not 0.1.2
+
+Plans: `docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md` and
+`docs/design/20261022_02_AUDIO_CAPTURE_PLAN.md` (both In implementation).
+
+The owner asked for the work to be merged with proper versioning. Both
+plans and the entries above expected 0.1.2. But the `cpal` feature now
+turns on `ndk/api-level-28`, so an app built with it needs Android 9, which
+a caller can observe. Under "Versions and tags" rule 4 that is not strictly
+additive, so this is 0.2.0 (tag `v0.2.0`). libmorph and libmorph-build
+take it with a minor bump of their own (rule 5).
+
+Not yet checked on a device, and left open in the plans: an explicit
+"Don't allow" with the rationale and a second request, and the plasma
+responding to sound.
