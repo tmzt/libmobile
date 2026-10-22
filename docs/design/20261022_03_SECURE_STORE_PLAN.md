@@ -296,3 +296,47 @@ part of its steps 2 and 4.
   project builds with and without the feature.
 - **Step 4:** `TrustedEnvironment` is checked by building with
   `secure-store-no-strongbox` and clearing the app's data first.
+
+## Amendment — 2026-10-22 18:35 EDT: an unlock-required flag per blob
+
+On the owner's question (2026-10-22): "does it make sense to add an
+unlock required flag/bit to the key record?", meaning the blob envelope
+on Android. Replaces the file layout in 2.2, the key paragraph of 2.1, the
+Kotlin signatures in 2.3 and the Rust API in 2.4 where they differ. This
+settles open question 1 per blob instead of for the whole store.
+
+- **Two wrapping keys.** `libmobile.secure-store.v1` as before, and
+  `libmobile.secure-store.unlocked.v1`, which is the same except
+  `setUnlockedDeviceRequired(true)`. Each is created on first use, with
+  the same StrongBox rule. Keystore refuses the second while the device is
+  locked.
+- **File layout** (replaces 2.2's table):
+
+  | Offset | Size | Field |
+  |---|---|---|
+  | 0 | 4 | magic `LMSS` |
+  | 4 | 1 | format version, `1` |
+  | 5 | 1 | flags: bit 0 = wrapped by the unlocked key; other bits must be 0 |
+  | 6 | 1 | IV length *n* (12) |
+  | 7 | *n* | IV |
+  | 7 + *n* | rest | ciphertext with the 16-byte GCM tag |
+
+  The GCM associated data is the 7 header bytes followed by the name, so
+  a changed flag or a renamed file fails to decrypt. Unknown flag bits are
+  `Corrupt`.
+- **Kotlin:** `put(activity, name, value, flags: Int)`. Using the
+  unlocked key while `KeyguardManager.isDeviceLocked` is true, or a
+  `UserNotAuthenticatedException` from Keystore, throws
+  `"locked: ..."`.
+- **Rust:** `SecureStoreError::Locked` (the enum is
+  `#[non_exhaustive]`), `PutOptions` (`#[non_exhaustive]`, `Default`,
+  `unlocked_only(bool)`), and `put_with(app, name, value, PutOptions)`.
+  `put` is `put_with` with the defaults, so the blob can be read while
+  locked. `get` and `delete` are unchanged; `get` reads the flag to
+  choose the key. `security_level` reports the default key.
+- **Step 4** adds: a blob written with `unlocked_only` reads back while
+  the phone is unlocked, and gives `Locked` when read with the screen
+  locked (the example reads it again on `Resume` and from a 5-second
+  timer, logging the result).
+- handlr's Noise key stays without the flag, so it can reconnect in the
+  background while the phone is locked.
