@@ -210,3 +210,11 @@ signatures are internal). Released with the blob store as libmobile 0.2.1.
    Noise, snow's or `OsRng`). Should the store pass one in, so a scripted
    desktop run could make repeatable keys? This matters more to libdevice's
    memory backend than to Android.
+
+## Amendment — 2026-10-22 19:11 EDT: no randomness from the store
+
+Agreed with the owner (2026-10-22). This settles open question 1 of
+section 6. `SecretKey::generate` takes no RNG: the adapter uses its own.
+Only libmorph's scripted runs (headless, for tests and evidence) could
+want repeatable keys, and nothing needs that. A test that needs a known
+key uses a test adapter whose `generate` returns a fixed value.
