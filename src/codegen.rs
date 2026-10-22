@@ -109,6 +109,12 @@ pub const PLUGINS: &[Plugin] = &[
         contributes: Contributes::NOTHING,
     },
     Plugin {
+        feature: None,
+        dir: "bridge",
+        class: "bridge.PermissionPlugin",
+        contributes: Contributes::NOTHING,
+    },
+    Plugin {
         feature: Some("google-auth"),
         dir: "auth",
         class: "auth.GoogleAuthPlugin",
@@ -761,6 +767,15 @@ mod tests {
             active_plugins(&[])
                 .iter()
                 .any(|p| p.class == "bridge.TextInputPlugin")
+        );
+    }
+
+    #[test]
+    fn permission_plugin_is_core() {
+        assert!(
+            active_plugins(&[])
+                .iter()
+                .any(|p| p.class == "bridge.PermissionPlugin")
         );
     }
 

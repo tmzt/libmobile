@@ -36,4 +36,15 @@ interface MobileActivityPlugin {
      * result; dispatch stops at the first plugin that does.
      */
     fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?): Boolean = false
+
+    /**
+     * Return `true` if this plugin made the request and consumed the
+     * result; dispatch stops at the first plugin that does.
+     */
+    fun onRequestPermissionsResult(
+        activity: Activity,
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ): Boolean = false
 }

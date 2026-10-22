@@ -8,7 +8,7 @@
 //!    returns, because `AndroidApp::native_window()` takes the same internal
 //!    lock the poll callback holds);
 //! 2. drains the Kotlin bridges' mailboxes — insets, intents, IME text, and
-//!    the feature results — as [`MobileEvent`]s, *before* input, so a tap that
+//!    permission answers and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
 //!    lands in the same tick as a rotation is resolved against the new insets;
 //! 3. pumps input events to [`MobileApp::input`];
 //! 4. calls [`MobileApp::tick`], where the app drains its own
@@ -26,6 +26,7 @@ pub mod camera;
 mod insets;
 mod intent;
 mod jni_util;
+mod permission;
 pub mod surface;
 pub mod text_input;
 
@@ -42,6 +43,7 @@ pub use camera::capture_photo;
 #[cfg(feature = "cpal")]
 pub use cpal;
 pub use ndk;
+pub use permission::{permission_granted, request_permissions};
 pub use surface::SurfaceTarget;
 pub use text_input::set_text_input;
 
@@ -165,6 +167,9 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for outcome in camera::take_results() {
         handler.event(app, MobileEvent::Capture(outcome));
     }
+    for outcome in permission::take_results() {
+        handler.event(app, MobileEvent::Permissions(outcome));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -191,4 +196,5 @@ fn discard_stale_commands() {
     let _ = auth::take_results();
     #[cfg(feature = "camera")]
     let _ = camera::take_results();
+    let _ = permission::take_results();
 }

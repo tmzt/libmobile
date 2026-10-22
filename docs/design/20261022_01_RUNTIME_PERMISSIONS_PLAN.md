@@ -1,7 +1,7 @@
 ---
 title: Runtime permission requests
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - An `onRequestPermissionsResult` hook on `MobileActivityPlugin`,
     dispatched by `MobileNativeActivity`
@@ -169,3 +169,13 @@ pub enum MobileEvent {
 Strictly additive (a defaulted Kotlin hook, new functions, a new type, a
 variant of a `#[non_exhaustive]` enum), so it is released as libmobile
 0.1.2.
+
+## Amendment — 2026-10-22 07:10 EDT: implementation has started; the document is now immutable
+
+The owner asked for this to be implemented (2026-10-22), on the
+`runtime-permissions` branch in its own worktree. Steps 1 and 2 are
+built in this commit, and step 3's example change is in it too. On the
+owner's Galaxy S23, the `wgpu` example showed the system dialog
+("Allow libmobile wgpu to record audio?") and logged
+`permissions [("android.permission.RECORD_AUDIO", true)]` when allowed.
+The denied answer is not yet checked.

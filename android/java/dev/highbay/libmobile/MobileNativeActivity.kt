@@ -12,7 +12,7 @@ import android.os.Bundle
  * changes nothing there. What this class adds is the callbacks stock
  * `NativeActivity` never forwards to native code — `onNewIntent` (an intent
  * aimed at a running instance is otherwise swallowed), window insets, IME
- * text, activity results — each handled by a [MobileActivityPlugin].
+ * text, activity and permission results — each handled by a [MobileActivityPlugin].
  *
  * Use it directly as the manifest's activity, or subclass it to add plugins:
  * ```
@@ -68,5 +68,14 @@ open class MobileNativeActivity : NativeActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         plugins.firstOrNull { it.onActivityResult(this, requestCode, resultCode, data) }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        plugins.firstOrNull { it.onRequestPermissionsResult(this, requestCode, permissions, grantResults) }
     }
 }
