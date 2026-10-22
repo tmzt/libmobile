@@ -223,3 +223,51 @@ are `#[non_exhaustive]`). Released as libmobile 0.2.1.
    option could come later.
 2. **Feature or core.** This plan puts it behind `secure-store`, like
    `camera`. It has no AAR and no permission, so it could be core instead.
+
+## Amendment — 2026-10-22 18:28 EDT: secure preferences in core, StrongBox as a default feature
+
+Agreed with the owner (2026-10-22). Replaces the feature in `covers`,
+the StrongBox paragraph of 2.1, the staging line of 2.3, step 2, step 4's
+security level, section 4, and open questions 2 and 3.
+
+- **Core, no feature for the store.** `SecureStorePlugin` is a core
+  plugin, listed in `PLUGINS` after `PermissionPlugin` and always
+  staged, and `libmobile::android::secure_store` is always built. Owner:
+  "the default is secure preferences", meaning envelope encryption under a
+  Keystore key, as `EncryptedSharedPreferences` does. Blobs stay in
+  no-backup files (2.2), not in `SharedPreferences`, which Auto Backup
+  copies by default. Restored blobs could never be decrypted, because
+  the key does not travel.
+- **StrongBox is a default feature, `secure-store-strongbox`.**
+  `default = ["secure-store-strongbox"]`. With it, the key is created
+  with `setIsStrongBoxBacked(true)`, and on
+  `StrongBoxUnavailableException` it is created again in the TEE, as 2.1
+  had it. Without it, the key is created in the TEE only. The feature
+  reaches Kotlin as a `BuildConfig`-free constant in the generated
+  `GeneratedPlugins.kt` (`SECURE_STORE_STRONGBOX: Boolean`), the
+  generated file being the only place codegen already varies by feature.
+  The feature applies when the key is first created. An existing key stays
+  where it is, and `security_level` reports where it lives.
+  StrongBox needs no permission, attestation or Play Integrity, only API 28
+  and `android.hardware.strongbox_keystore`. It is a feature because it is
+  slower and not on every device. The owner made it a default.
+- **What it protects against.** The key cannot be exported, even with
+  root. But on a rooted device, code running as the app can still ask
+  Keystore to decrypt the blobs. Protection against that (user
+  authentication on the key, or attestation checked by a server, as
+  Play Integrity does) would be a separate opt-in feature with its own
+  amendment, and none is planned.
+- **Step 2** becomes: the core plugin and the `secure-store-strongbox`
+  feature, with codegen tests for the plugin entry and both values of the
+  constant. **Done when:** `cargo test --workspace` passes, and a
+  generated project builds with `gradle assembleDebug` with and without
+  default features.
+- **Step 4**'s security level: `StrongBox` by default, and
+  `TrustedEnvironment` when the example is built with
+  `default-features = false` and the app's data cleared first.
+- **Section 4:** still strictly additive, so still 0.2.1. A new default
+  feature turns on only new behaviour, and the core plugin is a new
+  Kotlin class that apps not using it never call.
+- **Open question 1** (unlocked device) is settled: not required, so a
+  background reconnect works while the phone is locked. It may come later
+  as an opt-in.
