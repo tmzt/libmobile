@@ -126,3 +126,13 @@ take it with a minor bump of their own (rule 5).
 Not yet checked on a device, and left open in the plans: an explicit
 "Don't allow" with the rationale and a second request, and the plasma
 responding to sound.
+
+## 2026-10-22 18:19 EDT — Secure blob store (proposed)
+
+Plan: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (Draft). Requested
+by the handlr session with the owner's approval: its libmorph companion
+app needs a Noise private key and a server record kept on the device and
+protected at rest, with no file-based fallback. The proposal is a
+`secure-store` feature that does envelope encryption under an Android
+Keystore AES-256-GCM key, using StrongBox where available, with the
+ciphertext in no-backup storage. Proposed only, awaiting the owner.
