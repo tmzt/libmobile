@@ -59,4 +59,4 @@ jni = "0.22"
 cpal = { version = "0.18.2", optional = true }
 
 [workspace]
-members = [".", "examples/bitmap", "examples/wgpu"]
+members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture"]

@@ -1,0 +1,24 @@
+[package]
+name = "libmobile-example-audiocapture"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "libmobile example: the wgpu example's plasma, responding to the microphone through CaptureStream"
+
+[lib]
+name = "libmobile_example_audiocapture"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+libmobile = { path = "../..", features = ["cpal"] }
+log = "0.4"
+
+# The host copy, for `libmobile::gradle` in build.rs.
+[build-dependencies]
+libmobile = { path = "../.." }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+# As the wgpu example, whose GPU code this shares.
+wgpu = "29"
+pollster = "0.4"
