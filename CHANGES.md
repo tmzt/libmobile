@@ -29,3 +29,22 @@ cannot ask for a permission at runtime. A new core
 `android::request_permissions` and `permission_granted`, with the
 answer delivered as `MobileEvent::Permissions`. libmorph's audio capture
 plan depends on it. To be released as 0.1.2 (strictly additive).
+
+## 2026-10-22 07:18 EDT — Runtime permissions on the S23, and a stale Kotlin build
+
+Plan: `docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md` (In
+implementation), step 3.
+
+On the owner's Galaxy S23 Ultra the `wgpu` example showed the system
+dialog on a tap and logged `permissions [("android.permission.RECORD_AUDIO",
+true)]` when allowed. libmorph's audiocapture example, on this branch, saw
+both answers: an interrupted request (the app reinstalled while the dialog
+was up) arrived as denied, and a later one as granted. An explicit "Don't
+allow" is not yet checked.
+
+Found while building libmorph against this branch: when a build switches
+to another copy of libmobile, its `OUT_DIR` and so the staged Kotlin
+source root (`libmobile.gradle`'s `java.srcDir`) move. Gradle's
+incremental Kotlin compile in the generated project then fails with
+"Unresolved reference 'WindowInsetsPlugin'" (and the other bridges) until
+`gradle clean`. Not fixed here; a fix would belong in its own plan.
