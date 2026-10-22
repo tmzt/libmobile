@@ -69,3 +69,15 @@ Corrects the entry "cpal feature: ndk's AAudio API" above. ndk 0.9 gates
 `api-level-28` feature, so `cpal` enables `ndk/api-level-28` as well as
 `ndk/audio`. An app on this feature then needs API 28. The projects
 `libmobile::gradle` generates target API 29.
+
+## 2026-10-22 07:53 EDT — Runtime permissions: request ids, a queue, and the rationale check
+
+Plan: `docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md` (In
+implementation), amended on the owner's instruction.
+
+Before libmorph routes permission answers to apps, each request gets an
+id that its answer carries. `PermissionPlugin` queues requests so a second
+one no longer interrupts the first. `should_show_rationale` lets an app
+tell a request that will show a dialog from one Android will deny
+silently. Changes the unreleased `request_permissions` and
+`PermissionsOutcome`; still released as 0.1.2.
