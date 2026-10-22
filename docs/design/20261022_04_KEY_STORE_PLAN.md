@@ -218,3 +218,25 @@ section 6. `SecretKey::generate` takes no RNG: the adapter uses its own.
 Only libmorph's scripted runs (headless, for tests and evidence) could
 want repeatable keys, and nothing needs that. A test that needs a known
 key uses a test adapter whose `generate` returns a fixed value.
+
+## Amendment — 2026-10-22 19:16 EDT: DeviceLocked, Locked reserved, Platform, and a SecureStore struct
+
+Agreed with the owner (2026-10-22), as in libmorph's
+`20261022_04_OPAQUE_KEYS_PLAN.md`, amendment "the plan as it now stands".
+Replaces `KeyStoreError` in section 2 and the error mapping in 3.1.
+
+- `KeyStoreError` is `InvalidName`, `WrongKind(String)`,
+  `Corrupt(String)`, `DeviceLocked`, `Locked`, `Platform(String)`.
+  - `DeviceLocked`: the screen is locked and the key was made
+    `unlocked_only`.
+  - `Locked`: reserved for keys that must be unlocked before use (a later
+    plan). Nothing returns it yet.
+- Before this plan's steps, the blob store's `SecureStoreError::Locked`
+  becomes `DeviceLocked`, and the plugin's error kind `locked:` becomes
+  `device-locked:`, which maps to `DeviceLocked` in both stores. Its
+  `Jni` becomes `Platform`. An `android::SecureStore` struct
+  (`SecureStore::new(&app)`, with `get`, `put`, `put_with`, `delete`
+  and `security_level`) is added next to the functions, so the shape
+  matches libdevice's. These are departures from the frozen
+  `20261022_03_SECURE_STORE_PLAN.md`, recorded in CHANGES.md when they are
+  made. Nothing is released, so no existing error is renamed.
