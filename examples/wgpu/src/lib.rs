@@ -276,6 +276,8 @@ mod app {
         }
     }
 
+    const RECORD_AUDIO: &str = "android.permission.RECORD_AUDIO";
+
     impl MobileApp for WgpuApp {
         fn event(&mut self, app: &AndroidApp, event: MobileEvent) {
             match event {
@@ -288,15 +290,25 @@ mod app {
                 MobileEvent::Resume => self.resumed = true,
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
+                MobileEvent::Permissions(outcome) => {
+                    log::info!("wgpu: permissions {:?}", outcome.permissions);
+                }
                 _ => {}
             }
         }
 
-        fn input(&mut self, _app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
+        fn input(&mut self, app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
             let InputEvent::MotionEvent(motion) = event else {
                 return InputStatus::Unhandled;
             };
             let pointer = motion.pointer_at_index(motion.pointer_index());
+            // Shows the runtime permission dialog until the microphone is
+            // granted (the manifest declares it in build.rs).
+            if motion.action() == MotionAction::Down
+                && !libmobile::android::permission_granted(app, RECORD_AUDIO)
+            {
+                libmobile::android::request_permissions(app, &[RECORD_AUDIO]);
+            }
             match motion.action() {
                 MotionAction::Down | MotionAction::Move | MotionAction::PointerDown => {
                     self.uniforms.touch = [pointer.x(), pointer.y()];
