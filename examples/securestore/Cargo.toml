@@ -1,0 +1,28 @@
+[package]
+name = "libmobile-example-securestore"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "libmobile example: the wgpu example's plasma, with a launch counter kept in android::secure_store"
+
+[lib]
+name = "libmobile_example_securestore"
+crate-type = ["lib", "cdylib"]
+
+[features]
+# Passed through so the device check can build the TEE-only variant.
+no-strongbox = ["libmobile/secure-store-no-strongbox"]
+
+[dependencies]
+libmobile = { path = "../.." }
+log = "0.4"
+
+# The host copy, for `libmobile::gradle` in build.rs.
+[build-dependencies]
+libmobile = { path = "../.." }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+# As the wgpu example, whose GPU code this shares.
+wgpu = "29"
+pollster = "0.4"
