@@ -32,8 +32,9 @@ google-auth = []
 # (android/java/dev/highbay/libmobile/camera, src/android/camera.rs).
 camera = []
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and
-# input). No Kotlin plugin.
-cpal = ["dep:cpal"]
+# input). No Kotlin plugin. Also ndk's AAudio API (`ndk::audio`), for
+# input presets cpal cannot set (libmorph's capture modes).
+cpal = ["dep:cpal", "ndk/audio"]
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and
