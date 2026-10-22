@@ -271,3 +271,28 @@ security level, section 4, and open questions 2 and 3.
 - **Open question 1** (unlocked device) is settled: not required, so a
   background reconnect works while the phone is locked. It may come later
   as an opt-in.
+
+## Amendment — 2026-10-22 18:32 EDT: StrongBox by default, turned off by a negative feature
+
+Owner (2026-10-22): "we should use a negative feature to disable
+strongbox if we don't want it enabled, so that leaving out audio (or
+camera) doesn't disable a security feature". Replaces the
+`secure-store-strongbox` default feature in the amendment "secure
+preferences in core, StrongBox as a default feature", and the matching
+part of its steps 2 and 4.
+
+- **No default features.** libmobile's `default` stays `[]`. StrongBox
+  is tried by default (with the TEE fallback of 2.1). The feature
+  `secure-store-no-strongbox` turns that off, so the key is created in
+  the TEE only. Turning off default features can therefore never turn off
+  StrongBox.
+- Cargo features only add. If any crate in the build enables
+  `secure-store-no-strongbox`, it applies to the whole app, so only the
+  app itself should enable it.
+- **Generated constant.** `GeneratedPlugins.kt` gets
+  `const val SECURE_STORE_STRONGBOX: Boolean`, which is `false` only under
+  `secure-store-no-strongbox`.
+- **Step 2:** codegen tests cover both values of the constant, and the
+  project builds with and without the feature.
+- **Step 4:** `TrustedEnvironment` is checked by building with
+  `secure-store-no-strongbox` and clearing the app's data first.
