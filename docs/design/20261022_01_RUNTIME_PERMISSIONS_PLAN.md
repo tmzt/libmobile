@@ -217,3 +217,22 @@ this path. Replaces the signatures in sections 2 and 3, and adds a step 4.
    **Done when:** `cargo test --workspace` passes, Android clippy is
    clean, and on the S23 two requests made back to back are answered in
    order, with their own ids and names.
+
+## Amendment — 2026-10-22 08:06 EDT: the device checks move to the audiocapture example
+
+On the owner's instruction (2026-10-22). The owner noted that the `wgpu`
+example asks for permissions it does not use ("it doesn't look like wgpu
+uses either of those permissions"). Replaces the `wgpu` example in step 3
+and in the amendment "request ids, one request at a time, and the
+rationale check" (its step 4).
+
+- The `wgpu` example goes back to how it is on `main`: it declares and
+  asks for no permissions.
+- The device checks are made with the `audiocapture` example of
+  `docs/design/20261022_02_AUDIO_CAPTURE_PLAN.md`, which records from the
+  microphone. It asks for `RECORD_AUDIO`, logs the request id and answer,
+  logs `should_show_rationale` after a denial, and asks again on a tap.
+- Step 4's two requests made back to back were seen answered in order on
+  the S23 (`CHANGES.md`, "Permission ids and the queue on the S23"). No
+  example keeps that check: an app asks for what it uses. A host unit test
+  of the answer's id and names stays.
