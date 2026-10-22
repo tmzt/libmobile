@@ -81,3 +81,15 @@ one no longer interrupts the first. `should_show_rationale` lets an app
 tell a request that will show a dialog from one Android will deny
 silently. Changes the unreleased `request_permissions` and
 `PermissionsOutcome`; still released as 0.1.2.
+
+## 2026-10-22 07:55 EDT — Permission ids and the queue on the S23
+
+Plan: `docs/design/20261022_01_RUNTIME_PERMISSIONS_PLAN.md`, step 4.
+
+On the owner's Galaxy S23 Ultra, with both permissions revoked, one tap in
+the `wgpu` example made two requests back to back (`RECORD_AUDIO` as
+request 1, `CAMERA` as request 2). The dialogs came one after the other,
+and the answers arrived in order with their own ids and names. Both were
+allowed; the owner was using the phone at the same time, so the denied
+answer and `should_show_rationale` are not yet checked on a device.
+`PermissionsOutcome::from_result` and `denied` became crate-private.
