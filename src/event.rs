@@ -9,9 +9,24 @@
 use crate::insets::Insets;
 use crate::intent::IntentData;
 
+/// One `request_permissions` call, for matching its answer
+/// ([`PermissionsOutcome::request`]). Ids count from 1 per process.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct PermissionRequest(pub(crate) u32);
+
+impl PermissionRequest {
+    /// The id as a number, for logs and for wrappers with their own id type.
+    pub fn id(self) -> u32 {
+        self.0
+    }
+}
+
 /// The answer to one `request_permissions` call, in request order.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PermissionsOutcome {
+    /// The request this answers.
+    pub request: PermissionRequest,
     /// Each permission's full name and whether it is granted.
     pub permissions: Vec<(String, bool)>,
 }
@@ -20,7 +35,13 @@ impl PermissionsOutcome {
     /// From `onRequestPermissionsResult`: the names and grants it reported,
     /// or, when it reported none (an interrupted request), every `requested`
     /// name denied.
-    pub fn from_result(requested: Vec<String>, names: Vec<String>, granted: &[bool]) -> Self {
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))] // Built by the Android bridge.
+    pub(crate) fn from_result(
+        request: PermissionRequest,
+        requested: Vec<String>,
+        names: Vec<String>,
+        granted: &[bool],
+    ) -> Self {
         let permissions = if names.is_empty() {
             requested.into_iter().map(|name| (name, false)).collect()
         } else {
@@ -30,12 +51,17 @@ impl PermissionsOutcome {
                 .map(|(i, name)| (name, granted.get(i).copied().unwrap_or(false)))
                 .collect()
         };
-        Self { permissions }
+        Self {
+            request,
+            permissions,
+        }
     }
 
     /// Every requested name denied: the request could not be made.
-    pub fn denied<S: AsRef<str>>(requested: &[S]) -> Self {
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))] // Built by the Android bridge.
+    pub(crate) fn denied<S: AsRef<str>>(request: PermissionRequest, requested: &[S]) -> Self {
         Self::from_result(
+            request,
             requested.iter().map(|s| s.as_ref().to_owned()).collect(),
             Vec::new(),
             &[],
@@ -91,11 +117,14 @@ pub enum MobileEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::PermissionsOutcome;
+    use super::{PermissionRequest, PermissionsOutcome};
+
+    const REQUEST: PermissionRequest = PermissionRequest(7);
 
     #[test]
     fn answers_pair_names_with_grants() {
         let outcome = PermissionsOutcome::from_result(
+            REQUEST,
             vec!["a".into(), "b".into()],
             vec!["a".into(), "b".into()],
             &[true, false],
@@ -107,22 +136,23 @@ mod tests {
         assert!(outcome.granted("a"));
         assert!(!outcome.granted("b"));
         assert!(!outcome.granted("c"));
+        assert_eq!(outcome.request.id(), 7);
     }
 
     #[test]
     fn interrupted_request_denies_every_name() {
         let outcome =
-            PermissionsOutcome::from_result(vec!["a".into(), "b".into()], Vec::new(), &[]);
+            PermissionsOutcome::from_result(REQUEST, vec!["a".into(), "b".into()], Vec::new(), &[]);
         assert_eq!(
             outcome.permissions,
             [("a".to_owned(), false), ("b".to_owned(), false)]
         );
-        assert_eq!(outcome, PermissionsOutcome::denied(&["a", "b"]));
+        assert_eq!(outcome, PermissionsOutcome::denied(REQUEST, &["a", "b"]));
     }
 
     #[test]
     fn missing_grants_are_denials() {
-        let outcome = PermissionsOutcome::from_result(Vec::new(), vec!["a".into()], &[]);
+        let outcome = PermissionsOutcome::from_result(REQUEST, Vec::new(), vec!["a".into()], &[]);
         assert!(!outcome.granted("a"));
     }
 }

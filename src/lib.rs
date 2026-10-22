@@ -73,6 +73,6 @@ pub mod worker;
 #[cfg(target_os = "android")]
 pub mod android;
 
-pub use event::{MobileEvent, PermissionsOutcome};
+pub use event::{MobileEvent, PermissionRequest, PermissionsOutcome};
 pub use insets::{Insets, SafeArea};
 pub use intent::IntentData;

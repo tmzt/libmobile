@@ -43,7 +43,7 @@ pub use camera::capture_photo;
 #[cfg(feature = "cpal")]
 pub use cpal;
 pub use ndk;
-pub use permission::{permission_granted, request_permissions};
+pub use permission::{permission_granted, request_permissions, should_show_rationale};
 pub use surface::SurfaceTarget;
 pub use text_input::set_text_input;
 
