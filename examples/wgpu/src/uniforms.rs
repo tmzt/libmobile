@@ -12,6 +12,9 @@ pub struct Uniforms {
     /// left, top, right, bottom.
     pub safe: [f32; 4],
     pub touch: [f32; 2],
+    /// Sound level in 0..=1, for the `audiocapture` example; 0 draws the
+    /// plain plasma.
+    pub level: f32,
 }
 
 impl Uniforms {
@@ -41,7 +44,7 @@ impl Uniforms {
             self.safe[3],
             self.touch[0],
             self.touch[1],
-            0.0,
+            self.level,
             0.0,
         ];
         let mut out = [0u8; Self::SIZE];
@@ -73,6 +76,12 @@ mod tests {
         assert_eq!((at(5), at(7)), (75.0, 126.0));
         // `touch` follows at offset 32.
         assert_eq!((at(8), at(9)), (10.0, 20.0));
+        // `level` takes half of the old padding, at offset 40.
+        u.level = 0.5;
+        assert_eq!(
+            f32::from_ne_bytes(u.to_bytes()[40..44].try_into().unwrap()),
+            0.5
+        );
     }
 
     #[test]
