@@ -6,7 +6,10 @@
 //! * It writes blob `unlocked-only` with `PutOptions::unlocked_only` if
 //!   there is none, then reads it on every `Resume` and, from a worker
 //!   thread, every 5 seconds, logging the result: the text while the
-//!   device is unlocked, `Locked` while it is locked.
+//!   device is unlocked, `DeviceLocked` while it is locked.
+//! * The worker thread also counts its ticks in blob `worker`, with no
+//!   `AndroidApp` in reach (the store uses the Application from
+//!   `ndk-context`), and the main thread logs that count on every `Resume`.
 //! * A tap deletes `counter`, so the next launch counts from 1 again.
 //!
 //! The device, pipeline and shader are the `wgpu` example's own files,
@@ -58,6 +61,18 @@ mod app {
 
     const COUNTER: &str = "counter";
     const UNLOCKED_ONLY: &str = "unlocked-only";
+    /// Written by the timer thread, read on the main thread at `Resume`.
+    const WORKER: &str = "worker";
+
+    fn read_worker() {
+        match secure_store::get(WORKER) {
+            Ok(blob) => log::info!(
+                "securestore: {WORKER} (resume): {} ticks",
+                counter::decode(blob.as_deref())
+            ),
+            Err(error) => log::error!("securestore: get {WORKER}: {error}"),
+        }
+    }
 
     struct StoreApp {
         gpu: Option<Gpu>,
@@ -71,26 +86,26 @@ mod app {
     }
 
     /// Count this launch and make sure the unlocked-only blob exists.
-    fn on_launch(app: &AndroidApp) {
-        match secure_store::security_level(app) {
+    fn on_launch() {
+        match secure_store::security_level() {
             Ok(level) => log::info!("securestore: key in {level:?}"),
             Err(error) => log::error!("securestore: security level: {error}"),
         }
-        match secure_store::get(app, COUNTER) {
+        match secure_store::get(COUNTER) {
             Ok(blob) => {
                 let count = counter::decode(blob.as_deref()) + 1;
                 log::info!("securestore: launch {count}");
-                if let Err(error) = secure_store::put(app, COUNTER, &counter::encode(count)) {
+                if let Err(error) = secure_store::put(COUNTER, &counter::encode(count)) {
                     log::error!("securestore: put {COUNTER}: {error}");
                 }
             }
             Err(error) => log::error!("securestore: get {COUNTER}: {error}"),
         }
-        match secure_store::get(app, UNLOCKED_ONLY) {
+        match secure_store::get(UNLOCKED_ONLY) {
             Ok(Some(_)) => {}
             Ok(None) => {
                 let options = PutOptions::default().unlocked_only(true);
-                match secure_store::put_with(app, UNLOCKED_ONLY, b"only while unlocked", options) {
+                match secure_store::put_with(UNLOCKED_ONLY, b"only while unlocked", options) {
                     Ok(()) => log::info!("securestore: wrote {UNLOCKED_ONLY}"),
                     Err(error) => log::error!("securestore: put {UNLOCKED_ONLY}: {error}"),
                 }
@@ -99,8 +114,8 @@ mod app {
         }
     }
 
-    fn read_unlocked_only(app: &AndroidApp, from: &str) {
-        match secure_store::get(app, UNLOCKED_ONLY) {
+    fn read_unlocked_only(from: &str) {
+        match secure_store::get(UNLOCKED_ONLY) {
             Ok(Some(text)) => log::info!(
                 "securestore: {UNLOCKED_ONLY} ({from}): {:?}",
                 String::from_utf8_lossy(&text)
@@ -117,7 +132,7 @@ mod app {
                     window_changed(&mut self.gpu, &mut self.uniforms, app);
                     if !self.counted {
                         self.counted = true;
-                        on_launch(app);
+                        on_launch();
                     }
                 }
                 MobileEvent::WindowDestroyed => {
@@ -128,7 +143,8 @@ mod app {
                 MobileEvent::Resume => {
                     self.resumed = true;
                     if self.counted {
-                        read_unlocked_only(app, "resume");
+                        read_unlocked_only("resume");
+                        read_worker();
                     }
                 }
                 MobileEvent::Pause => self.resumed = false,
@@ -137,7 +153,7 @@ mod app {
             }
         }
 
-        fn input(&mut self, app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
+        fn input(&mut self, _app: &AndroidApp, event: &InputEvent<'_>) -> InputStatus {
             let InputEvent::MotionEvent(motion) = event else {
                 return InputStatus::Unhandled;
             };
@@ -146,7 +162,7 @@ mod app {
                 MotionAction::Down => {
                     self.uniforms.touch = [pointer.x(), pointer.y()];
                     self.down = true;
-                    match secure_store::delete(app, COUNTER) {
+                    match secure_store::delete(COUNTER) {
                         Ok(removed) => log::info!("securestore: deleted {COUNTER}: {removed}"),
                         Err(error) => log::error!("securestore: delete {COUNTER}: {error}"),
                     }
@@ -194,11 +210,17 @@ mod app {
         );
         // The store from another thread, every 5 seconds, also while the
         // activity is paused or the screen is locked.
-        let worker = app.clone();
+        // No AndroidApp in reach of this thread: the store finds the
+        // Application through ndk-context.
         std::thread::spawn(move || {
+            let mut ticks = 0u64;
             loop {
                 std::thread::sleep(Duration::from_secs(5));
-                read_unlocked_only(&worker, "timer");
+                read_unlocked_only("timer");
+                ticks += 1;
+                if let Err(error) = secure_store::put(WORKER, &counter::encode(ticks)) {
+                    log::error!("securestore: put {WORKER} (timer): {error}");
+                }
             }
         });
         run(
