@@ -497,3 +497,17 @@ pub fn subscribe_tokio() -> tokio::sync::mpsc::UnboundedReceiver<SystemEvent>;
 
 libmorph then wraps it under its own plan, which gets an amendment
 pointing here once this plan is approved.
+
+## Amendment — 2026-10-23 18:09 EDT: approved
+
+The owner approved this plan on 2026-10-23 ("approve plan and build next
+release"), without separate answers to section 7, so its recommendations
+and proposals stand:
+1. Step 4 checks background capture with `Microphone`, and the example
+   declares and starts with it.
+2. Swiping the app away stops the service by default
+   (`stopWithTask="true"`); `foreground_service_keeps_running` opts out.
+3. handlr starts with the wake lock released; the user acquires it from
+   the notification.
+
+The status stays `Draft` until the first commit that implements it.
