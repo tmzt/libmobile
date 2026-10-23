@@ -1,7 +1,7 @@
 ---
 title: Secure blob store backed by Android Keystore
 date: 2026-10-22
-status: In implementation
+status: Implemented
 covers:
   - A `secure-store` Cargo feature with a Kotlin plugin,
     `store/SecureStorePlugin.kt`
@@ -364,3 +364,26 @@ S23 Ultra (API 36):
 
 Not yet checked: reading an `unlocked_only` blob with the device
 unlocked, and getting `Locked` from it after locking again.
+
+## Amendment — 2026-10-22 21:10 EDT: implemented
+
+Every step is done and its **Done when:** holds. It is released in
+libmobile 0.2.1. Commits:
+- Steps 1 to 3 (types, plugin and feature, Rust bridge) and the
+  unlock-required flag: `3d69b8e`.
+- Step 4 (the example): `b103194`, with `27d2d3d` (build script) and
+  later `372006b` and `748136e`.
+- Departures recorded in CHANGES.md:
+  - `b02c823`: `DeviceLocked` and `Platform`;
+  - `97a3657`: the Application context and no `&AndroidApp`, as step 2
+    of libmorph's key store plan.
+
+Checked on the owner's S23 Ultra:
+- StrongBox by default, and the TEE with `secure-store-no-strongbox`;
+- counts across force-stops;
+- no plaintext in the files;
+- a renamed blob is `Corrupt`;
+- `pm clear` starts again;
+- an `unlocked_only` blob reads unlocked and is `DeviceLocked` locked.
+
+See CHANGES.md.
