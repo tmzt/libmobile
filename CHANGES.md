@@ -159,3 +159,27 @@ A departure from the secure-store plan, before any release:
   different state (like in Connectbot, where keys can be unlocked to use
   them)". `Locked` is left for the key store's app-unlock flag.
 - `Jni` is `Platform`.
+
+## 2026-10-22 20:36 EDT — Secure store: the Application context, no `&AndroidApp`
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation),
+and libmorph `docs/design/20261022_06_KEY_STORE_PLAN.md`, step 2.
+
+A departure from the secure-store plan, before any release. The key store
+shares `SecureStorePlugin` and needs it to work without an activity, so
+the plugin now takes a `Context`. Rust passes the Application that
+android-activity registers with `ndk-context`, which is a new direct
+dependency so libmobile shares android-activity's copy. The blob functions
+drop `&AndroidApp`, as in `secure_store::get(name)`, and
+`android::SecureStore` wraps them for libdevice's shape.
+
+On the owner's S23 Ultra:
+- the key is in StrongBox;
+- the counter goes from 1 to 2 across a force-stop;
+- a worker thread with no `AndroidApp` wrote a blob that the main thread
+  read back (5 ticks);
+- with the screen locked, an `unlocked_only` put reported
+  `DeviceLocked`.
+
+Not yet checked: reading an `unlocked_only` blob written while unlocked,
+which needs the owner to unlock the phone.
