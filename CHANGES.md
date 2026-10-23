@@ -195,3 +195,11 @@ used it inside `with_key`, and wrote and read back the `unlocked_only`
 blob. After the screen was turned off over adb (`deviceLocked=1`), the
 worker thread's next reads of both gave `DeviceLocked`. Key `device`
 (no flags) loaded with the same fingerprint as before.
+
+## 2026-10-22 23:30 EDT — URL schemes and a redacted intent log (approved)
+
+Plan: `docs/design/20261022_05_URL_SCHEMES_PLAN.md` (Draft, approved by
+the owner with libmorph's `docs/design/20261022_07_URL_SCHEMES_PLAN.md`,
+which wraps it). `gradle::Project::url_scheme` declares VIEW intent
+filters, and the intent log stops showing URLs past their path, so a
+pairing secret in a fragment never reaches logcat.
