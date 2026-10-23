@@ -59,6 +59,19 @@ pub(super) type Stored = (u8, Zeroizing<Vec<u8>>);
 #[derive(Clone)]
 pub struct Vault(Inner);
 
+impl std::fmt::Debug for Vault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = f.debug_tuple("Vault");
+        match self.0 {
+            #[cfg(target_os = "android")]
+            Inner::Named(ref namespace) => out.field(namespace),
+            #[cfg(feature = "test-vault")]
+            Inner::Memory(_) => out.field(&"memory"),
+        };
+        out.finish()
+    }
+}
+
 #[derive(Clone)]
 enum Inner {
     #[cfg(target_os = "android")]
