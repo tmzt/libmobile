@@ -147,3 +147,15 @@ out a `KeyHandle`. Sealing needs a `SealToken` only libmobile can make.
 Keys have their own API and storage (a second space in
 `SecureStorePlugin`), separate from the blob store. libdevice will
 implement the same API on the desktop, and libmorph wraps both.
+
+## 2026-10-22 20:32 EDT — Secure store: DeviceLocked and Platform
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` (In implementation),
+and libmorph `docs/design/20261022_06_KEY_STORE_PLAN.md`, step 1.
+
+A departure from the secure-store plan, before any release:
+- `SecureStoreError::Locked` is `DeviceLocked`, and the plugin's error
+  kind `locked:` is `device-locked:`. Owner: "Locked and DeviceLocked are
+  different state (like in Connectbot, where keys can be unlocked to use
+  them)". `Locked` is left for the key store's app-unlock flag.
+- `Jni` is `Platform`.
