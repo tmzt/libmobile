@@ -1,7 +1,7 @@
 ---
 title: Declaring URL schemes, and redacting the intent log
 date: 2026-10-22
-status: In implementation
+status: Implemented
 covers:
   - "`gradle::Project::url_scheme`: VIEW intent filters for custom URL
     schemes in the generated manifest"
@@ -138,3 +138,15 @@ section 6 is answered after step 2, if it arises.
 
 Step 1 starts with this commit. The document now changes only on the
 owner's explicit instruction.
+
+## Amendment — 2026-10-22 23:53 EDT: implemented
+
+Every step is done and its **Done when:** holds:
+- step 1: `1d9efda` and `5b37af0`;
+- step 2: checked on the S23 Ultra, as recorded in CHANGES.md
+  (`4e7dc4b`);
+- step 3: the release commit that follows, tagged `v0.2.2`.
+
+The open question in section 6 did not arise. `singleTop` delivered
+links sent both in front and from the background through
+`onNewIntent`, with one activity in one task.
