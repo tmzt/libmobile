@@ -108,6 +108,11 @@ pub enum MobileEvent {
     GoogleLogin(crate::auth::LoginOutcome),
     #[cfg(feature = "camera")]
     Capture(crate::camera::CaptureOutcome),
+    /// The foreground service did something, or its notification was
+    /// tapped (`android::service`). Also delivered to system-event
+    /// subscribers under `system-events`.
+    #[cfg(feature = "foreground-service")]
+    Service(crate::system_events::ServiceEvent),
     /// The user answered a
     /// [`request_permissions`](crate::android::request_permissions) call.
     Permissions(PermissionsOutcome),

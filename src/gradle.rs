@@ -74,6 +74,7 @@
 //!     .expect("gradle project");
 //! ```
 
+pub use crate::codegen::ServiceType;
 use crate::codegen::{self, GradleProject};
 use std::env;
 use std::fs;
@@ -142,6 +143,9 @@ pub struct Project {
     out_dir: Option<PathBuf>,
     env_prefix: String,
     url_schemes: Vec<String>,
+    /// The declared foreground service types, if any.
+    service_types: Option<Vec<ServiceType>>,
+    service_keeps_running: bool,
 }
 
 impl Project {
@@ -156,6 +160,8 @@ impl Project {
             out_dir: None,
             env_prefix: normalize_prefix(DEFAULT_ENV_PREFIX),
             url_schemes: Vec::new(),
+            service_types: None,
+            service_keeps_running: false,
         }
     }
 
@@ -209,6 +215,49 @@ impl Project {
         self
     }
 
+    /// Declare the foreground service with the types it may be started
+    /// with (`libmobile::android::service`). Adds the `<service>` element,
+    /// the `specialUse` reason, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_<TYPE>`
+    /// for each type, `POST_NOTIFICATIONS` and `WAKE_LOCK`. `RECORD_AUDIO` for
+    /// [`ServiceType::Microphone`] stays the app's own [`Project::permission`].
+    /// Without the `foreground-service` feature on the libmobile the app
+    /// links, [`Project::generate`] fails with an error that names the
+    /// feature. Panics on an empty list. A later call replaces the types.
+    pub fn foreground_service(mut self, types: &[ServiceType]) -> Self {
+        assert!(
+            !types.is_empty(),
+            "libmobile: foreground_service needs at least one type"
+        );
+        self.service_types = Some(types.to_vec());
+        self
+    }
+
+    /// Swiping the app away from Recents leaves the service running
+    /// (`stopWithTask="false"`), and the service reports
+    /// `ServiceEvent::TaskRemoved`. By default swiping it away stops the
+    /// service.
+    pub fn foreground_service_keeps_running(mut self) -> Self {
+        self.service_keeps_running = true;
+        self
+    }
+
+    /// Declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, so
+    /// `battery::request_ignore_optimizations` may ask the user directly.
+    /// Play allows that only for some kinds of app; see that function.
+    pub fn request_ignore_battery_optimizations(mut self) -> Self {
+        if !self
+            .spec
+            .permissions
+            .iter()
+            .any(|p| p == IGNORE_BATTERY_OPTIMIZATIONS)
+        {
+            self.spec
+                .permissions
+                .push(IGNORE_BATTERY_OPTIMIZATIONS.to_string());
+        }
+        self
+    }
+
     pub fn sdk(mut self, min: u32, target: u32, compile: u32) -> Self {
         self.spec.min_sdk = min;
         self.spec.target_sdk = target;
@@ -241,7 +290,7 @@ impl Project {
     /// Write the project and return its directory. `Ok(None)` (nothing
     /// written) when the build is not for Android, so host builds and tests
     /// of the app crate are unaffected.
-    pub fn generate(self) -> io::Result<Option<PathBuf>> {
+    pub fn generate(mut self) -> io::Result<Option<PathBuf>> {
         for var in [
             "LIBMOBILE_GRADLE_PROJECT_DIR",
             "ANDROID_HOME",
@@ -273,6 +322,25 @@ impl Project {
                 )
             })
         })?;
+        let features_var = metadata_var(&self.env_prefix, "FEATURES");
+        println!("cargo:rerun-if-env-changed={features_var}");
+        let service = match &self.service_types {
+            Some(types) => {
+                check_service_feature(env::var(&features_var).ok().as_deref())?;
+                Some(codegen::foreground_service_manifest(
+                    types,
+                    self.service_keeps_running,
+                ))
+            }
+            None => None,
+        };
+        if let Some(service) = &service {
+            for permission in &service.permissions {
+                if !self.spec.permissions.iter().any(|p| p == permission) {
+                    self.spec.permissions.push(permission.to_string());
+                }
+            }
+        }
         let profile_dir = profile_dir(&PathBuf::from(env_var("OUT_DIR")?))?;
         let native_lib = profile_dir.join(format!("lib{}.so", self.spec.lib_name));
 
@@ -285,7 +353,11 @@ impl Project {
         };
         for (name, contents) in self.spec.render(&libmobile_gradle, &native_lib, abi) {
             let contents = if name == MANIFEST {
-                with_url_schemes(&contents, &self.url_schemes)
+                let contents = with_url_schemes(&contents, &self.url_schemes);
+                match &service {
+                    Some(service) => with_service(&contents, &service.application),
+                    None => contents,
+                }
             } else {
                 contents
             };
@@ -325,6 +397,33 @@ fn with_url_schemes(manifest: &str, schemes: &[String]) -> String {
         &format!("{filters}        </activity>"),
         1,
     )
+}
+
+/// The rendered manifest with the service element at the end of
+/// `<application>`.
+fn with_service(manifest: &str, service: &str) -> String {
+    manifest.replacen(
+        "    </application>",
+        &format!("{service}    </application>"),
+        1,
+    )
+}
+
+const IGNORE_BATTERY_OPTIMIZATIONS: &str =
+    "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS";
+
+/// The feature the service needs, given the `FEATURES` metadata of the
+/// libmobile the app links.
+fn check_service_feature(features: Option<&str>) -> io::Result<()> {
+    let on = features.is_some_and(|f| f.split(',').any(|f| f.trim() == "foreground-service"));
+    if on {
+        Ok(())
+    } else {
+        Err(io::Error::other(
+            "Project::foreground_service needs libmobile's `foreground-service` feature \
+             on the libmobile the app links (or its wrapper's passthrough)",
+        ))
+    }
 }
 
 /// `sdk.dir`, escaped for a `.properties` file (`\\` and `:` are special).
@@ -399,6 +498,45 @@ mod tests {
         let end = with.find("</activity>").unwrap();
         assert!(launcher < filter && filter < end);
         assert_eq!(with.matches("</activity>").count(), 1);
+    }
+
+    #[test]
+    fn service_needs_its_feature() {
+        assert!(check_service_feature(Some("camera,foreground-service")).is_ok());
+        for features in [None, Some(""), Some("camera"), Some("foreground-services")] {
+            let err = check_service_feature(features).unwrap_err().to_string();
+            assert!(err.contains("`foreground-service`"), "{err}");
+        }
+    }
+
+    #[test]
+    fn service_goes_inside_the_application() {
+        let spec = GradleProject::new("dev.example.app", "example_app");
+        let files = spec.render(Path::new("/l.gradle"), Path::new("/l.so"), "arm64-v8a");
+        let manifest = &files.iter().find(|(n, _)| *n == MANIFEST).unwrap().1;
+        let service = codegen::foreground_service_manifest(&[ServiceType::DataSync], false);
+        let with = with_service(manifest, &service.application);
+        let at = with.find("<service").unwrap();
+        assert!(with.find("</activity>").unwrap() < at);
+        assert!(at < with.find("</application>").unwrap());
+    }
+
+    #[test]
+    fn builder_records_the_service() {
+        let project = Project::new("a.b")
+            .foreground_service(&[ServiceType::Microphone])
+            .foreground_service_keeps_running()
+            .request_ignore_battery_optimizations()
+            .request_ignore_battery_optimizations();
+        assert_eq!(project.service_types, Some(vec![ServiceType::Microphone]));
+        assert!(project.service_keeps_running);
+        assert_eq!(project.spec.permissions, [IGNORE_BATTERY_OPTIMIZATIONS]);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least one type")]
+    fn foreground_service_needs_a_type() {
+        let _ = Project::new("a.b").foreground_service(&[]);
     }
 
     #[test]

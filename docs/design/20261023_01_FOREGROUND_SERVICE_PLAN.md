@@ -1,7 +1,7 @@
 ---
 title: Foreground service, notification controls and system events
 date: 2026-10-23
-status: Draft
+status: In implementation
 covers:
   - "A generated foreground service (feature `foreground-service`),
     declared from the app's build script and controlled from Rust on any
@@ -531,3 +531,9 @@ This replaces answer 1 of the amendment "approved", section 7's question
 - Step 4 has no background-capture check.
 - `ServiceType::Microphone` stays in the API and the manifest code as
   sections 3 and 4.2 define them, for a later plan.
+
+## Amendment — 2026-10-23 18:20 EDT: implementation has started; the document is now immutable
+
+Implementation has started: step 1 (the service) starts with this commit.
+The status is now `In implementation`, and this document is immutable.
+Departures are recorded in CHANGES.md.

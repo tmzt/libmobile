@@ -8,7 +8,7 @@
 //!    returns, because `AndroidApp::native_window()` takes the same internal
 //!    lock the poll callback holds);
 //! 2. drains the Kotlin bridges' mailboxes — insets, intents, IME text, and
-//!    permission answers and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
+//!    permission answers, service events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
 //!    lands in the same tick as a rotation is resolved against the new insets;
 //! 3. pumps input events to [`MobileApp::input`];
 //! 4. calls [`MobileApp::tick`], where the app drains its own
@@ -23,6 +23,8 @@
 pub mod audio_capture;
 #[cfg(feature = "google-auth")]
 pub mod auth;
+#[cfg(feature = "foreground-service")]
+pub mod battery;
 #[cfg(feature = "camera")]
 pub mod camera;
 mod insets;
@@ -30,6 +32,8 @@ mod intent;
 mod jni_util;
 mod permission;
 pub mod secure_store;
+#[cfg(feature = "foreground-service")]
+pub mod service;
 pub mod surface;
 pub mod text_input;
 
@@ -175,6 +179,10 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for outcome in permission::take_results() {
         handler.event(app, MobileEvent::Permissions(outcome));
     }
+    #[cfg(feature = "foreground-service")]
+    for event in service::take_events() {
+        handler.event(app, MobileEvent::Service(event));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -202,4 +210,6 @@ fn discard_stale_commands() {
     #[cfg(feature = "camera")]
     let _ = camera::take_results();
     let _ = permission::take_results();
+    #[cfg(feature = "foreground-service")]
+    let _ = service::take_events();
 }

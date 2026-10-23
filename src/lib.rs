@@ -72,6 +72,10 @@ pub mod intent;
 pub mod key_store;
 pub mod mailbox;
 pub mod secure_store;
+#[cfg(feature = "foreground-service")]
+pub mod service;
+#[cfg(feature = "foreground-service")]
+pub mod system_events;
 pub mod worker;
 
 #[cfg(target_os = "android")]

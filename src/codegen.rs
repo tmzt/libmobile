@@ -149,6 +149,16 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
+    // The service, its notification and the battery calls
+    // (`service/`, `src/android/service.rs`). The `<service>` element and
+    // its permissions come from `gradle::Project::foreground_service`, which
+    // knows the types ([`foreground_service_manifest`]).
+    Plugin {
+        feature: Some("foreground-service"),
+        dir: "service",
+        class: "service.ForegroundServicePlugin",
+        contributes: Contributes::NOTHING,
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -634,6 +644,116 @@ pub fn url_scheme_filters(schemes: &[String]) -> String {
         .collect()
 }
 
+/// The generated foreground service's class, fully qualified.
+pub const FOREGROUND_SERVICE_CLASS: &str = "dev.highbay.libmobile.service.MobileForegroundService";
+
+/// A type the foreground service may be started with
+/// (`android:foregroundServiceType`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ServiceType {
+    /// `dataSync`: limited to 6 hours in 24 from Android 15.
+    DataSync,
+    /// `microphone`: capture while in the background. Needs `RECORD_AUDIO`
+    /// granted when the service starts.
+    Microphone,
+    /// `specialUse`, with the stated reason, for Play review.
+    SpecialUse(&'static str),
+    /// `remoteMessaging`.
+    RemoteMessaging,
+}
+
+impl ServiceType {
+    /// The manifest's name for the type.
+    pub fn manifest_name(self) -> &'static str {
+        match self {
+            ServiceType::DataSync => "dataSync",
+            ServiceType::Microphone => "microphone",
+            ServiceType::SpecialUse(_) => "specialUse",
+            ServiceType::RemoteMessaging => "remoteMessaging",
+        }
+    }
+
+    /// `FOREGROUND_SERVICE_<TYPE>`, the permission the type needs.
+    pub fn permission(self) -> &'static str {
+        match self {
+            ServiceType::DataSync => "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+            ServiceType::Microphone => "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+            ServiceType::SpecialUse(_) => "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+            ServiceType::RemoteMessaging => {
+                "android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING"
+            }
+        }
+    }
+
+    /// `ServiceInfo.FOREGROUND_SERVICE_TYPE_*`.
+    pub fn bits(self) -> i32 {
+        match self {
+            ServiceType::DataSync => 1,
+            ServiceType::Microphone => 1 << 7,
+            ServiceType::SpecialUse(_) => 1 << 30,
+            ServiceType::RemoteMessaging => 1 << 9,
+        }
+    }
+}
+
+/// What a declared foreground service adds to the manifest.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ServiceManifest {
+    /// `uses-permission` names, in order.
+    pub permissions: Vec<&'static str>,
+    /// The `<service>` element, indented to sit inside `<application>`.
+    pub application: String,
+}
+
+/// The `<service>` element and permissions for a foreground service with
+/// `types`. Each kind is declared once; of several `SpecialUse` reasons the
+/// first is used. `keeps_running` sets `stopWithTask="false"`, so swiping
+/// the app away from Recents leaves the service running.
+pub fn foreground_service_manifest(types: &[ServiceType], keeps_running: bool) -> ServiceManifest {
+    let mut kinds: Vec<ServiceType> = Vec::new();
+    for ty in types {
+        if !kinds.iter().any(|k| k.bits() == ty.bits()) {
+            kinds.push(*ty);
+        }
+    }
+    let mut permissions = vec!["android.permission.FOREGROUND_SERVICE"];
+    permissions.extend(kinds.iter().map(|k| k.permission()));
+    permissions.push("android.permission.POST_NOTIFICATIONS");
+    permissions.push("android.permission.WAKE_LOCK");
+    let names: Vec<&str> = kinds.iter().map(|k| k.manifest_name()).collect();
+    let mut application = format!(
+        "
+        <service
+            android:name=\"{FOREGROUND_SERVICE_CLASS}\"
+            android:exported=\"false\"
+            android:stopWithTask=\"{}\"
+            android:foregroundServiceType=\"{}\"",
+        !keeps_running,
+        names.join("|"),
+    );
+    let reason = kinds.iter().find_map(|k| match k {
+        ServiceType::SpecialUse(reason) => Some(*reason),
+        _ => None,
+    });
+    match reason {
+        Some(reason) => application.push_str(&format!(
+            ">
+            <property
+                android:name=\"android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE\"
+                android:value=\"{}\" />
+        </service>
+",
+            xml_attr(reason)
+        )),
+        None => application.push_str(" />\n"),
+    }
+    ServiceManifest {
+        permissions,
+        application,
+    }
+}
+
 /// The Android ABI directory for a Rust target triple.
 pub fn android_abi(target: &str) -> Option<&'static str> {
     match target.split('-').next()? {
@@ -724,7 +844,94 @@ mod tests {
         // `[features]`; `cpal` has no plugin and is not listed.
         assert_eq!(
             known_features(),
-            vec!["google-auth", "camera", "secure-store-no-strongbox"]
+            vec![
+                "google-auth",
+                "camera",
+                "foreground-service",
+                "secure-store-no-strongbox"
+            ]
+        );
+    }
+
+    #[test]
+    fn foreground_service_manifest_declares_types_and_permissions() {
+        let m = foreground_service_manifest(
+            &[
+                ServiceType::SpecialUse("a link & more"),
+                ServiceType::Microphone,
+                ServiceType::SpecialUse("ignored"),
+            ],
+            false,
+        );
+        assert_eq!(
+            m.permissions,
+            [
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+                "android.permission.POST_NOTIFICATIONS",
+                "android.permission.WAKE_LOCK",
+            ]
+        );
+        let xml = &m.application;
+        assert!(
+            xml.contains("android:name=\"dev.highbay.libmobile.service.MobileForegroundService\"")
+        );
+        assert!(xml.contains("android:exported=\"false\""));
+        assert!(xml.contains("android:stopWithTask=\"true\""));
+        assert!(xml.contains("android:foregroundServiceType=\"specialUse|microphone\""));
+        assert!(xml.contains("android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"));
+        assert!(xml.contains("android:value=\"a link &amp; more\""));
+        assert!(!xml.contains("ignored"));
+        assert!(xml.trim_end().ends_with("</service>"));
+    }
+
+    #[test]
+    fn foreground_service_manifest_each_type() {
+        for (ty, name, permission) in [
+            (
+                ServiceType::DataSync,
+                "dataSync",
+                "FOREGROUND_SERVICE_DATA_SYNC",
+            ),
+            (
+                ServiceType::Microphone,
+                "microphone",
+                "FOREGROUND_SERVICE_MICROPHONE",
+            ),
+            (
+                ServiceType::RemoteMessaging,
+                "remoteMessaging",
+                "FOREGROUND_SERVICE_REMOTE_MESSAGING",
+            ),
+        ] {
+            let m = foreground_service_manifest(&[ty], true);
+            assert!(
+                m.application
+                    .contains(&format!("android:foregroundServiceType=\"{name}\""))
+            );
+            assert!(m.application.contains("android:stopWithTask=\"false\""));
+            assert!(m.application.trim_end().ends_with("/>"));
+            assert!(!m.application.contains("<property"));
+            assert!(
+                m.permissions
+                    .contains(&&*format!("android.permission.{permission}"))
+            );
+        }
+        assert_eq!(ServiceType::DataSync.bits(), 1);
+        assert_eq!(ServiceType::Microphone.bits(), 128);
+        assert_eq!(ServiceType::RemoteMessaging.bits(), 512);
+        assert_eq!(ServiceType::SpecialUse("").bits(), 1 << 30);
+    }
+
+    #[test]
+    fn foreground_service_plugin_is_feature_gated() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "service"));
+        let active = active_plugins(&["foreground-service"]);
+        assert!(
+            active
+                .iter()
+                .any(|p| p.class == "service.ForegroundServicePlugin")
         );
     }
 

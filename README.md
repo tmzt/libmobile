@@ -36,6 +36,7 @@ android/java/dev/highbay/libmobile/
   bridge/                   core bridges: window insets, intents, text input
   auth/                     feature "google-auth": Credential Manager sign-in
   camera/                   feature "camera": capture through the system camera app
+  service/                  feature "foreground-service": the foreground service and its notification
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
   gradle.rs                 generates the Gradle project from the app's build.rs
@@ -54,6 +55,7 @@ examples/
 | `google-auth` | `auth/GoogleAuthPlugin`    | `androidx.credentials` and `googleid` AARs; `MobileEvent::GoogleLogin` |
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
 | `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
+| `foreground-service` | `service/ForegroundServicePlugin` | `android::service`, `android::battery`; `MobileEvent::Service` |
 
 ## Usage
 
@@ -146,6 +148,47 @@ that packages the `.so` cargo just built:
 cargo build --release --target aarch64-linux-android --lib
 gradle -p target/aarch64-linux-android/release/gradle/<package> assembleDebug
 ```
+
+### Foreground service
+
+With the `foreground-service` feature, a foreground service keeps the
+process from being frozen in the background, so the app's own threads keep
+running with the screen off. Declare it with its types in the build script:
+
+```rust
+use libmobile::gradle::ServiceType;
+
+libmobile::gradle::Project::new("com.example.app")
+    .foreground_service(&[ServiceType::SpecialUse("a link to the user's own server")])
+    .generate()
+    .expect("gradle project");
+```
+
+This adds the `<service>` element and its permissions (`FOREGROUND_SERVICE`,
+`FOREGROUND_SERVICE_<TYPE>`, `POST_NOTIFICATIONS`, `WAKE_LOCK`). By default,
+swiping the app away from Recents stops the service;
+`.foreground_service_keeps_running()` changes that.
+
+Start it while the app is visible, from any thread. Ask for
+`POST_NOTIFICATIONS` first, or the notification is hidden:
+
+```rust
+use libmobile::android::service::{self, NotificationAction, NotificationContent, ServiceOptions};
+
+let mut content = NotificationContent::new("Example", "connected");
+content.actions.push(NotificationAction::new("ping", "Ping"));
+let mut options = ServiceOptions::new(vec![ServiceType::SpecialUse("")], content);
+options.controls.ongoing = true; // posted again if dismissed
+options.controls.exit = true; // an Exit button
+options.controls.wake_lock_toggle = true; // a wake-lock button
+service::start(&options)?;
+service::update_text("3 messages")?;
+```
+
+Button taps, Exit and the service's own changes arrive as
+`MobileEvent::Service(ServiceEvent::…)`. Exit stops the service, delivers
+`Exited` and finishes the activity; the app's threads end themselves.
+`android::battery` checks and asks for the battery-optimization exemption.
 
 ### Gradle: your own project
 
