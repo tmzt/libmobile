@@ -300,3 +300,63 @@ them changing its types, calls or behaviour:
   `--es cmd start-later [--es delay <s>]` stops the service, then starts it
   again from a thread after the delay, so a start from the background can
   be tried after Home.
+
+## 2026-10-23 18:53 EDT — Foreground service on the S23 (step 4, partial)
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`, steps 3 and 4.
+The `background` example (`a923b6f`, built with `88bfe52`) on the
+owner's Galaxy S23 Ultra (Android 16, API 36), over adb on the tailnet.
+The phone was on cellular with Wi-Fi off, so the listener was
+`nc -lk 7999` on the Mac's tailnet address. Battery setting as found, not
+changed: not on the Doze allowlist (`is_ignoring_optimizations` gave
+`Ok(false)`), `RUN_ANY_IN_BACKGROUND` default (allow), that is Samsung's
+default "Optimized".
+
+Passed:
+- Step 3: it builds, runs, asks for `POST_NOTIFICATIONS` (granted with
+  `pm grant` first), and starts: `background: start: Ok(())`,
+  `libmobile: service Started`, `main loop Started`.
+- The notification as `dumpsys notification` shows it:
+  `flags=ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE`,
+  `category=service actions=3 vis=PRIVATE`, buttons `[0] "Exit"`,
+  `[1] "Acquire wake lock"`, `[2] "Ping"`, each a `startService`
+  PendingIntent; the text follows `update_text`
+  (`android.text=String (45 lines sent to 100.103.47.86:7999)`).
+- In the background (Home, `Visible(false)`) from 18:29:16 to past
+  18:52, the listener got a line every 30 s with no gap: 46 lines, intervals
+  30 or 31 s with the screen on. The process was not frozen
+  (`isFrozen=false`, `curProcState=5` during the run).
+- With the screen off (18:40:01 to 18:43:53, power button, by the owner),
+  lines kept coming, but late once the CPU slept: intervals of 39, 34, 37
+  and 36 s, as section 2 expects without a wake lock.
+- System events at the first `subscribe()`: `Visible(true)`,
+  `Focused(true)`, `DeviceIdle(false)`,
+  `Network(Some(NetworkInfo { validated: true, metered: true, transport: Vpn }))`;
+  then `Focused(false)` and `Visible(false)` when the screen went off,
+  and `Focused(true)` when it came on. A first version counted the
+  activity from the process importance at subscribe time; `88bfe52`
+  counts it from its `onCreate` (see the departures entry).
+
+Not finished:
+- The full 10-minute screen-off check. The owner was using the phone
+  (Termux, handlr): the screen was on from 18:30:44 to 18:40:01 and from
+  18:43:53 to 18:51:31, so neither window reached 10 minutes. A third
+  window started at 18:51:31 and was still open when this was written
+  (lines 45 and 46 at 30 s). Rerun with the phone left alone, on the
+  default setting and on "Unrestricted".
+
+Not checked, needing the owner's hands (the phone is locked with a secure
+lock, so the shade shows no buttons and adb cannot unlock it): the
+wake-lock button (labels, " (wake lock held)", `dumpsys power` listing
+`libmobile:foreground`, `WakeLock(bool)`), Ping (`Action("ping")`),
+Exit, swiping the notification, swiping the app from Recents, Home and
+return. Not run, for lack of time in this session: `--es cmd wake-on/off`,
+Wi-Fi on and off (`svc wifi`), `dumpsys deviceidle force-idle`/`unforce`,
+`POST_NOTIFICATIONS` revoked (`NotificationHidden`), and
+`--es cmd start-later` (`StartNotAllowed`). With and without the battery
+exemption needs the owner to change the setting. Background capture is out
+of scope (the owner's change).
+
+The phone was left as found: Wi-Fi off, not in Doze, permissions as before
+(`POST_NOTIFICATIONS` granted to the example only), the example
+force-stopped.
