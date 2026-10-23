@@ -11,6 +11,12 @@
 //!   `AndroidApp` in reach (the store uses the Application from
 //!   `ndk-context`), and the main thread logs that count on every `Resume`.
 //! * A tap deletes `counter`, so the next launch counts from 1 again.
+//! * The key store (`key_store`, namespace `libmobile.example`): key `device`
+//!   is generated on first launch and its public fingerprint logged on later
+//!   ones; key `device-unlocked` is made with `FLAG_DEVICE_UNLOCK_REQUIRED`
+//!   and read with the blobs, giving `DeviceLocked` while the screen is
+//!   locked. The adapter, `ExampleKey`, is 32 random bytes with a `u64`
+//!   fingerprint as its public value (enough for a test).
 //!
 //! The device, pipeline and shader are the `wgpu` example's own files,
 //! included with `#[path]`.
@@ -20,6 +26,52 @@
 mod gpu;
 #[path = "../../wgpu/src/uniforms.rs"]
 pub mod uniforms;
+
+/// The example's key adapter, kept apart from Android so it is tested on
+/// the host.
+pub mod example_key {
+    use libmobile::key_store::{SealToken, SecretKey};
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+
+    /// 32 bytes behind a pointer, so moves copy only the pointer.
+    #[derive(Zeroize, ZeroizeOnDrop)]
+    pub struct ExampleKey(Box<[u8; 32]>);
+
+    impl SecretKey for ExampleKey {
+        type Public = u64;
+        const KIND: &'static str = "libmobile.example.test.v1";
+
+        fn generate(_: &SealToken) -> Self {
+            let mut key = Self(Box::new([0; 32]));
+            if let Err(error) = std::fs::File::open("/dev/urandom")
+                .and_then(|mut f| std::io::Read::read_exact(&mut f, &mut key.0[..]))
+            {
+                panic!("example key: no randomness: {error}");
+            }
+            key
+        }
+
+        fn seal(&self, _: &SealToken) -> Zeroizing<Vec<u8>> {
+            Zeroizing::new(self.0.to_vec())
+        }
+
+        fn unseal(_: &str, bytes: &[u8], _: &SealToken) -> Result<Self, String> {
+            let mut key = Self(Box::new([0; 32]));
+            if bytes.len() != 32 {
+                return Err(format!("{} bytes, not 32", bytes.len()));
+            }
+            key.0.copy_from_slice(bytes);
+            Ok(key)
+        }
+
+        fn public(&self) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            self.0.hash(&mut hasher);
+            hasher.finish()
+        }
+    }
+}
 
 /// The counter's encoding, kept apart from Android so it is tested on the
 /// host.
@@ -53,11 +105,47 @@ mod app {
     use std::time::{Duration, Instant};
 
     use crate::counter;
+    use crate::example_key::ExampleKey;
     use crate::gpu::{Gpu, window_changed};
     use crate::uniforms::Uniforms;
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::{AndroidApp, InputStatus, MobileApp, run, secure_store};
+    use libmobile::key_store::{self, FLAG_DEVICE_UNLOCK_REQUIRED, KeyStoreError, Vault};
     use libmobile::{MobileEvent, PutOptions};
+
+    const NAMESPACE: &str = "libmobile.example";
+    const DEVICE_KEY: &str = "device";
+    const UNLOCKED_KEY: &str = "device-unlocked";
+
+    fn vault() -> Vault {
+        Vault::named(NAMESPACE).expect("a valid namespace")
+    }
+
+    /// Load key `name`, or generate it with `flags` if there is none.
+    fn key(name: &str, flags: u8) {
+        let vault = vault();
+        match key_store::public::<ExampleKey>(&vault, name) {
+            Ok(public) => log::info!("securestore: key {name}: {public:016x} (loaded)"),
+            Err(KeyStoreError::NotFound) => {
+                match key_store::generate::<ExampleKey>(&vault, name, flags) {
+                    Ok(public) => log::info!("securestore: key {name}: {public:016x} (generated)"),
+                    Err(error) => log::info!("securestore: key {name}: generate: {error:?}"),
+                }
+            }
+            Err(error) => log::info!("securestore: key {name}: {error:?}"),
+        }
+    }
+
+    /// Use key `name` inside `with_key`, logging what the closure saw.
+    fn use_key(name: &str, from: &str) {
+        let seen = key_store::with_key::<ExampleKey, _>(&vault(), name, |key| {
+            libmobile::key_store::SecretKey::public(key)
+        });
+        match seen {
+            Ok(public) => log::info!("securestore: key {name} ({from}): used {public:016x}"),
+            Err(error) => log::info!("securestore: key {name} ({from}): {error:?}"),
+        }
+    }
 
     const COUNTER: &str = "counter";
     const UNLOCKED_ONLY: &str = "unlocked-only";
@@ -87,6 +175,8 @@ mod app {
 
     /// Count this launch and make sure the unlocked-only blob exists.
     fn on_launch() {
+        key(DEVICE_KEY, 0);
+        key(UNLOCKED_KEY, FLAG_DEVICE_UNLOCK_REQUIRED);
         match secure_store::security_level() {
             Ok(level) => log::info!("securestore: key in {level:?}"),
             Err(error) => log::error!("securestore: security level: {error}"),
@@ -115,6 +205,7 @@ mod app {
     }
 
     fn read_unlocked_only(from: &str) {
+        use_key(UNLOCKED_KEY, from);
         match secure_store::get(UNLOCKED_ONLY) {
             Ok(Some(text)) => log::info!(
                 "securestore: {UNLOCKED_ONLY} ({from}): {:?}",

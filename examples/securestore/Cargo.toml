@@ -16,6 +16,7 @@ no-strongbox = ["libmobile/secure-store-no-strongbox"]
 [dependencies]
 libmobile = { path = "../.." }
 log = "0.4"
+zeroize = { version = "1.8", features = ["derive"] }
 
 # The host copy, for `libmobile::gradle` in build.rs.
 [build-dependencies]
