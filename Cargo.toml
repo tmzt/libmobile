@@ -84,4 +84,4 @@ ndk-context = "0.1"
 cpal = { version = "0.18.2", optional = true }
 
 [workspace]
-members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture", "examples/securestore"]
+members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture", "examples/securestore", "examples/background"]
