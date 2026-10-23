@@ -21,13 +21,12 @@ import dev.highbay.libmobile.NativeLib
  * System events for the app's own threads (`libmobile::system_events`).
  *
  * Rust calls [register] at the first `subscribe()`, with the Application.
- * It registers, for the life of the process, activity lifecycle callbacks
- * (visibility and focus), the default network callback and a Doze receiver,
- * and reports the state at that moment. Each callback reports to Rust on the
- * thread it runs on; Rust hands the event to the subscribers at once.
- *
- * It needs no activity hooks: it is in the plugin list only so that it is
- * staged with the feature.
+ * It registers, for the life of the process, the default network callback
+ * and a Doze receiver, and reports the state at that moment. Activity
+ * lifecycle callbacks (visibility and focus) are registered earlier, at the
+ * first activity's `onCreate`, so that they see its `onStart`; they report
+ * only once Rust has subscribed. Each callback reports to Rust on the thread
+ * it runs on; Rust hands the event to the subscribers at once.
  */
 object SystemEventsPlugin : MobileActivityPlugin {
     // State kinds: keep in step with `src/android/system_events.rs`.
@@ -42,31 +41,49 @@ object SystemEventsPlugin : MobileActivityPlugin {
     private const val VPN = 3
     private const val OTHER = 4
 
+    /** Rust has subscribed: events are reported. Guarded by `this`. */
     private var registered = false
+
+    /** The lifecycle callbacks are registered. Guarded by `this`. */
+    private var tracking = false
 
     /** Started and resumed activities, so several activities count as one app. Guarded by `this`. */
     private var started = 0
     private var resumed = 0
 
+    /**
+     * The lifecycle callbacks go on at the first activity's `onCreate`,
+     * before its `onStart`, so the counts are right when Rust subscribes
+     * later. Nothing is reported until then.
+     */
+    override fun onCreate(activity: Activity, savedInstanceState: Bundle?) {
+        track(activity.application, seed = false)
+    }
+
+    private fun track(app: Application, seed: Boolean) = synchronized(this) {
+        if (tracking) return@synchronized
+        tracking = true
+        if (seed) {
+            // No activity has been created yet; count from the process importance.
+            val state = ActivityManager.RunningAppProcessInfo()
+            ActivityManager.getMyMemoryState(state)
+            started = if (state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) 1 else 0
+            resumed = if (state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) 1 else 0
+        }
+        app.registerActivityLifecycleCallbacks(Lifecycle)
+    }
+
     /** Called from Rust via JNI: static, `(Landroid/content/Context;)V`. */
     @JvmStatic
     fun register(context: Context) {
         val app = context.applicationContext as Application
+        track(app, seed = true)
         synchronized(this) {
             if (registered) return
             registered = true
-            // Callbacks registered now miss the current activity's start, so
-            // count it from the process importance.
-            val state = ActivityManager.RunningAppProcessInfo()
-            ActivityManager.getMyMemoryState(state)
-            val visible = state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE
-            val focused = state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
-            started = if (visible) 1 else 0
-            resumed = if (focused) 1 else 0
-            nativeStateSafe(VISIBLE, visible)
-            nativeStateSafe(FOCUSED, focused)
+            nativeStateSafe(VISIBLE, started > 0)
+            nativeStateSafe(FOCUSED, resumed > 0)
         }
-        app.registerActivityLifecycleCallbacks(Lifecycle)
         registerDoze(app)
         registerNetwork(app)
     }
@@ -86,7 +103,7 @@ object SystemEventsPlugin : MobileActivityPlugin {
         val before = if (kind == VISIBLE) started else resumed
         val after = maxOf(0, before + step)
         if (kind == VISIBLE) started = after else resumed = after
-        if ((before == 0) != (after == 0)) nativeStateSafe(kind, after > 0)
+        if (registered && (before == 0) != (after == 0)) nativeStateSafe(kind, after > 0)
     }
 
     private fun registerDoze(app: Application) {
