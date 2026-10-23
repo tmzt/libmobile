@@ -243,3 +243,12 @@ Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (Draft, approved).
 The owner approved it; section 7's recommendations stand (background
 capture is checked, swipe-away stops the service by default, the wake
 lock starts released). The release after it is 0.2.3.
+
+## 2026-10-23 18:18 EDT — Foreground service: no background microphone
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`. On the
+owner's instruction, an amendment drops background capture: the example
+starts `specialUse` only, and step 4 has no capture check. Android stops
+microphone input when the app is hidden. `ServiceType::Microphone` stays
+in the API. libmorph's plan was approved at the same time and wraps this
+one.
