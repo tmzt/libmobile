@@ -203,3 +203,24 @@ the owner with libmorph's `docs/design/20261022_07_URL_SCHEMES_PLAN.md`,
 which wraps it). `gradle::Project::url_scheme` declares VIEW intent
 filters, and the intent log stops showing URLs past their path, so a
 pairing secret in a fragment never reaches logcat.
+
+## 2026-10-22 23:33 EDT — URL schemes on the S23
+
+Plan: `docs/design/20261022_05_URL_SCHEMES_PLAN.md` (steps 1 and 2).
+
+Step 1 is `1d9efda` and `5b37af0`. The `wgpu` example's merged
+manifest has the `libmobile-wgpu` VIEW filter, and `assembleDebug`
+builds it.
+
+On the owner's S23 Ultra, with `am start -a android.intent.action.VIEW`:
+- `libmobile-wgpu://example.ts.net:7347/pair#secret` cold-started the
+  app (`LaunchState: COLD`), and it logged
+  `…/pair<redacted>` with `is_new=false`;
+- a link sent while the app was in front, and one sent after Home, both
+  reached the running activity through `onNewIntent` (`is_new=true`).
+  `dumpsys activity activities` still showed one activity in one task
+  (`t4968`).
+
+`secret` appeared in logcat only in adbd's record of the shell command,
+never from the app. `singleTop` is enough, so the plan's open question
+does not arise.
