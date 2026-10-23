@@ -511,3 +511,23 @@ and proposals stand:
    the notification.
 
 The status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-23 18:18 EDT: no background microphone
+
+The owner's instruction (2026-10-23, relayed by the handlr session and
+confirmed in the libmorph session: "approve plans in both repos"):
+"microphone shouldn't work in the background, if it needs to be in the
+background service that's a different question, but hiding the app
+should stop the input. it's better to let Android enforce that rule than
+do it ourselves".
+
+This replaces answer 1 of the amendment "approved", section 7's question
+1, and the microphone parts of steps 3 and 4:
+- The service is for keeping a link and playback alive. When the app is
+  hidden, Android stops microphone input itself, and libmobile does not
+  try to keep or stop it.
+- Step 3's `background` example declares and starts `specialUse` only,
+  and opens no capture stream.
+- Step 4 has no background-capture check.
+- `ServiceType::Microphone` stays in the API and the manifest code as
+  sections 3 and 4.2 define them, for a later plan.
