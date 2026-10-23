@@ -47,17 +47,21 @@ import javax.crypto.spec.GCMParameterSpec
  * the IV) followed by the name. Writes go to a `.tmp` file that is synced
  * and then moved over the blob.
  *
+ * The key store (`libmobile::key_store`, `Vault::named`) is a second space:
+ * `libmobile-key-store/<namespace>/<name>.blob`, the same file layout, sealed
+ * under its own wrapping keys. Its associated data is the header, then
+ * `<namespace>/<name>`. Unlike blobs, it stores and authenticates any flags
+ * byte: bit 0 still picks the wrapping key, and Rust refuses the bits it does
+ * not enforce. Its reads return `[flags][envelope]`.
+ *
  * Failures are thrown as [SecureStoreException] with a `"<kind>: <detail>"`
  * message (`keystore`, `io`, `corrupt`, `device-locked`), which Rust maps to its error type.
  * Every method is synchronous and may be called from any thread. Rust passes
  * the Application (from `ndk-context`), so no activity is needed.
  */
 object SecureStorePlugin : MobileActivityPlugin {
-    private const val ALIAS = "libmobile.secure-store.v1"
-    private const val UNLOCKED_ALIAS = "libmobile.secure-store.unlocked.v1"
     private const val PROVIDER = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"
-    private const val DIR = "libmobile-secure-store"
     private const val SUFFIX = ".blob"
     private val MAGIC = byteArrayOf('L'.code.toByte(), 'M'.code.toByte(), 'S'.code.toByte(), 'S'.code.toByte())
     private const val VERSION: Byte = 1
@@ -67,7 +71,16 @@ object SecureStorePlugin : MobileActivityPlugin {
     private const val FLAG_UNLOCKED = 1
     private const val TAG_BITS = 128
 
-    /** Guards the key and the files. */
+    /**
+     * A directory and its pair of wrapping keys. [strictFlags]: other flag
+     * bits than [FLAG_UNLOCKED] are refused (blobs) or kept (keys).
+     */
+    private class Space(val dir: String, val alias: String, val unlockedAlias: String, val strictFlags: Boolean)
+
+    private val BLOBS = Space("libmobile-secure-store", "libmobile.secure-store.v1", "libmobile.secure-store.unlocked.v1", strictFlags = true)
+    private val KEYS = Space("libmobile-key-store", "libmobile.key-store.v1", "libmobile.key-store.unlocked.v1", strictFlags = false)
+
+    /** Guards the keys and the files. */
     private val lock = Any()
 
     class SecureStoreException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -75,34 +88,7 @@ object SecureStorePlugin : MobileActivityPlugin {
     /** Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;)[B`. `null` if absent. */
     @JvmStatic
     fun get(context: Context, name: String): ByteArray? = synchronized(lock) {
-        val file = blob(context, name)
-        val data = try {
-            if (!file.exists()) return null
-            file.readBytes()
-        } catch (e: IOException) {
-            throw fail("io", e)
-        }
-        val ivLen = parseHeader(data)
-        val unlocked = data[5].toInt() and FLAG_UNLOCKED != 0
-        try {
-            val key = key(context, unlocked, create = false)
-                ?: throw SecureStoreException("corrupt: the store's key is missing")
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, data, HEADER, ivLen))
-            cipher.updateAAD(data, 0, HEADER)
-            cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
-            cipher.doFinal(data, HEADER + ivLen, data.size - HEADER - ivLen)
-        } catch (e: UserNotAuthenticatedException) {
-            throw fail("device-locked", e)
-        } catch (e: AEADBadTagException) {
-            throw fail("corrupt", e)
-        } catch (e: KeyPermanentlyInvalidatedException) {
-            throw fail("corrupt", e)
-        } catch (e: GeneralSecurityException) {
-            throw fail("keystore", e)
-        } catch (e: ProviderException) {
-            throw fail("keystore", e)
-        }
+        read(context, BLOBS, File(dir(context, BLOBS), name + SUFFIX), name)?.second
     }
 
     /**
@@ -111,57 +97,61 @@ object SecureStorePlugin : MobileActivityPlugin {
      */
     @JvmStatic
     fun put(context: Context, name: String, value: ByteArray, flags: Int): Unit = synchronized(lock) {
-        val sealed = try {
-            require(flags and FLAG_UNLOCKED.inv() == 0) { "unknown flags $flags" }
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.ENCRYPT_MODE, key(context, flags and FLAG_UNLOCKED != 0, create = true))
-            val iv = cipher.iv
-            val header = MAGIC + byteArrayOf(VERSION, flags.toByte(), iv.size.toByte())
-            cipher.updateAAD(header)
-            cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
-            header + iv + cipher.doFinal(value)
-        } catch (e: UserNotAuthenticatedException) {
-            throw fail("device-locked", e)
-        } catch (e: GeneralSecurityException) {
-            throw fail("keystore", e)
-        } catch (e: ProviderException) {
-            throw fail("keystore", e)
-        } finally {
-            value.fill(0)
-        }
-        val file = blob(context, name)
-        val tmp = File(file.path + ".tmp")
-        try {
-            file.parentFile?.mkdirs()
-            FileOutputStream(tmp).use { out ->
-                out.write(sealed)
-                out.fd.sync()
-            }
-            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-        } catch (e: IOException) {
-            tmp.delete()
-            throw fail("io", e)
-        }
+        require(flags and FLAG_UNLOCKED.inv() == 0) { "unknown flags $flags" }
+        write(context, BLOBS, File(dir(context, BLOBS), name + SUFFIX), name, flags, value)
     }
 
     /** Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;)Z`. `true` if removed. */
     @JvmStatic
     fun delete(context: Context, name: String): Boolean = synchronized(lock) {
-        val file = blob(context, name)
-        File(file.path + ".tmp").delete()
-        if (!file.exists()) return false
-        if (!file.delete()) throw SecureStoreException("io: could not delete ${file.name}")
-        true
+        remove(File(dir(context, BLOBS), name + SUFFIX))
+    }
+
+    /**
+     * Called from Rust via JNI: static,
+     * `(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)[B`. The
+     * key store: `[flags][envelope]`, or `null` if absent.
+     */
+    @JvmStatic
+    fun keyGet(context: Context, namespace: String, name: String): ByteArray? = synchronized(lock) {
+        val (flags, envelope) = read(context, KEYS, keyFile(context, namespace, name), "$namespace/$name")
+            ?: return null
+        try {
+            byteArrayOf(flags.toByte()) + envelope
+        } finally {
+            envelope.fill(0)
+        }
+    }
+
+    /**
+     * Called from Rust via JNI: static,
+     * `(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;I[B)V`.
+     */
+    @JvmStatic
+    fun keyPut(context: Context, namespace: String, name: String, flags: Int, envelope: ByteArray): Unit =
+        synchronized(lock) {
+            require(flags in 0..0xff) { "flags $flags" }
+            write(context, KEYS, keyFile(context, namespace, name), "$namespace/$name", flags, envelope)
+        }
+
+    /**
+     * Called from Rust via JNI: static,
+     * `(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z`.
+     */
+    @JvmStatic
+    fun keyDelete(context: Context, namespace: String, name: String): Boolean = synchronized(lock) {
+        remove(keyFile(context, namespace, name))
     }
 
     /**
      * Called from Rust via JNI: static, `(Landroid/content/Context;)I`. Where the
-     * key lives: 0 software, 1 TEE, 2 StrongBox. Creates the key if needed.
+     * blob store's key lives: 0 software, 1 TEE, 2 StrongBox. Creates the key if
+     * needed.
      */
     @JvmStatic
-    fun securityLevel(@Suppress("UNUSED_PARAMETER") context: Context): Int = synchronized(lock) {
+    fun securityLevel(context: Context): Int = synchronized(lock) {
         try {
-            val key = key(context, unlocked = false, create = true)!!
+            val key = key(context, BLOBS, unlocked = false, create = true)!!
             val info = SecretKeyFactory.getInstance(key.algorithm, PROVIDER)
                 .getKeySpec(key, KeyInfo::class.java) as KeyInfo
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -181,16 +171,89 @@ object SecureStorePlugin : MobileActivityPlugin {
         }
     }
 
-    private fun blob(context: Context, name: String): File =
-        File(File(context.noBackupFilesDir, DIR), name + SUFFIX)
+    private fun dir(context: Context, space: Space): File = File(context.noBackupFilesDir, space.dir)
+
+    private fun keyFile(context: Context, namespace: String, name: String): File =
+        File(File(dir(context, KEYS), namespace), name + SUFFIX)
+
+    /** Decrypt [file]: its flags and plaintext, or `null` if absent. */
+    private fun read(context: Context, space: Space, file: File, aad: String): Pair<Int, ByteArray>? {
+        val data = try {
+            if (!file.exists()) return null
+            file.readBytes()
+        } catch (e: IOException) {
+            throw fail("io", e)
+        }
+        val ivLen = parseHeader(data, space)
+        val flags = data[5].toInt() and 0xff
+        try {
+            val key = key(context, space, flags and FLAG_UNLOCKED != 0, create = false)
+                ?: throw SecureStoreException("corrupt: the store's key is missing")
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, data, HEADER, ivLen))
+            cipher.updateAAD(data, 0, HEADER)
+            cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+            return flags to cipher.doFinal(data, HEADER + ivLen, data.size - HEADER - ivLen)
+        } catch (e: UserNotAuthenticatedException) {
+            throw fail("device-locked", e)
+        } catch (e: AEADBadTagException) {
+            throw fail("corrupt", e)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            throw fail("corrupt", e)
+        } catch (e: GeneralSecurityException) {
+            throw fail("keystore", e)
+        } catch (e: ProviderException) {
+            throw fail("keystore", e)
+        }
+    }
+
+    /** Encrypt [value] (cleared afterwards) and write it atomically to [file]. */
+    private fun write(context: Context, space: Space, file: File, aad: String, flags: Int, value: ByteArray) {
+        val sealed = try {
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.ENCRYPT_MODE, key(context, space, flags and FLAG_UNLOCKED != 0, create = true))
+            val iv = cipher.iv
+            val header = MAGIC + byteArrayOf(VERSION, flags.toByte(), iv.size.toByte())
+            cipher.updateAAD(header)
+            cipher.updateAAD(aad.toByteArray(Charsets.UTF_8))
+            header + iv + cipher.doFinal(value)
+        } catch (e: UserNotAuthenticatedException) {
+            throw fail("device-locked", e)
+        } catch (e: GeneralSecurityException) {
+            throw fail("keystore", e)
+        } catch (e: ProviderException) {
+            throw fail("keystore", e)
+        } finally {
+            value.fill(0)
+        }
+        val tmp = File(file.path + ".tmp")
+        try {
+            file.parentFile?.mkdirs()
+            FileOutputStream(tmp).use { out ->
+                out.write(sealed)
+                out.fd.sync()
+            }
+            Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: IOException) {
+            tmp.delete()
+            throw fail("io", e)
+        }
+    }
+
+    private fun remove(file: File): Boolean {
+        File(file.path + ".tmp").delete()
+        if (!file.exists()) return false
+        if (!file.delete()) throw SecureStoreException("io: could not delete ${file.name}")
+        return true
+    }
 
     /** Checks the header and returns the IV length. */
-    private fun parseHeader(data: ByteArray): Int {
+    private fun parseHeader(data: ByteArray, space: Space): Int {
         if (data.size < HEADER || !data.copyOfRange(0, 4).contentEquals(MAGIC)) {
             throw SecureStoreException("corrupt: not a secure store blob")
         }
         if (data[4] != VERSION) throw SecureStoreException("corrupt: unknown format version ${data[4]}")
-        if (data[5].toInt() and FLAG_UNLOCKED.inv() != 0) {
+        if (space.strictFlags && data[5].toInt() and FLAG_UNLOCKED.inv() != 0) {
             throw SecureStoreException("corrupt: unknown flags ${data[5]}")
         }
         val ivLen = data[6].toInt() and 0xff
@@ -201,15 +264,15 @@ object SecureStorePlugin : MobileActivityPlugin {
     }
 
     /**
-     * One of the store's keys; created on first use when [create]. The
+     * One of [space]'s wrapping keys; created on first use when [create]. The
      * [unlocked] key is refused while the device is locked, reported as
-     * `locked` before Keystore is asked.
+     * `device-locked` before Keystore is asked.
      */
-    private fun key(context: Context, unlocked: Boolean, create: Boolean): SecretKey? {
+    private fun key(context: Context, space: Space, unlocked: Boolean, create: Boolean): SecretKey? {
         if (unlocked && context.getSystemService(KeyguardManager::class.java).isDeviceLocked) {
             throw SecureStoreException("device-locked: the device is locked")
         }
-        val alias = if (unlocked) UNLOCKED_ALIAS else ALIAS
+        val alias = if (unlocked) space.unlockedAlias else space.alias
         val store = try {
             KeyStore.getInstance(PROVIDER).apply { load(null) }
         } catch (e: IOException) {

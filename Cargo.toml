@@ -40,6 +40,9 @@ cpal = ["dep:cpal", "ndk/audio", "ndk/api-level-28"]
 # (src/android/secure_store.rs). Negative so that turning off default
 # features cannot turn off a security feature; app crates only.
 secure-store-no-strongbox = []
+# `key_store::Vault::memory()`, an in-memory vault for tests only. Normal
+# app builds do not have it.
+test-vault = []
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and
@@ -48,6 +51,8 @@ crate-type = ["lib"]
 
 [dependencies]
 log = "0.4"
+# Clears key material the key store holds (`key_store`).
+zeroize = { version = "1.8", features = ["derive"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

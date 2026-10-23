@@ -69,6 +69,7 @@ pub mod event;
 pub mod gradle;
 pub mod insets;
 pub mod intent;
+pub mod key_store;
 pub mod mailbox;
 pub mod secure_store;
 pub mod worker;
