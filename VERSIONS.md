@@ -46,3 +46,33 @@ own hash.
   `start`, `stop`), and the platform-free `InputPreset` (`to_raw`,
   `from_raw`), `CaptureFormat` and `CaptureError`, in the new module
   `audio_capture`.
+
+## 0.2.1 — 2026-10-22 (tag `v0.2.1`)
+
+The secure store (`docs/design/20261022_03_SECURE_STORE_PLAN.md`) and the
+key store (libmorph `docs/design/20261022_06_KEY_STORE_PLAN.md`). All
+additions. The commit is the one tagged `v0.2.1`.
+
+- **Secure store** (core):
+  - `android::secure_store::{get, put, put_with, delete,
+    security_level}` and `android::SecureStore`: named blobs sealed with
+    AES-256-GCM under a non-exportable Android Keystore key (StrongBox when
+    present), in no-backup storage;
+  - the platform-free `SecureStoreError` (`#[non_exhaustive]`: `InvalidName`,
+    `TooLarge`, `Keystore`, `DeviceLocked`, `Io`, `Corrupt`,
+    `Platform`), `SecurityLevel` and `PutOptions` (`unlocked_only`);
+  - no `AndroidApp` argument: it uses the Application from `ndk-context`.
+- **Key store** (core):
+  - the module `key_store`: `generate`, `public`, `with_key` and
+    `delete` over a `Vault` (`Vault::named(namespace)`);
+  - the `SecretKey` trait for adapters, `SealToken`, `KeyStoreError`
+    (`#[non_exhaustive]`), and `FLAG_DEVICE_UNLOCK_REQUIRED` and
+    `FLAG_APP_UNLOCK_REQUIRED` (reserved, refused);
+  - the same engine file as libdevice's.
+- **Features:** `secure-store-no-strongbox` (keeps the Keystore keys in the
+  TEE) and `test-vault` (`Vault::memory()`, for tests only).
+- **Kotlin:** the core plugin `store.SecureStorePlugin` is in every
+  generated project, and `GeneratedPlugins.SECURE_STORE_STRONGBOX` is
+  generated.
+- **Dependencies:** `zeroize` 1.8 (with `derive`) is new, and so, on
+  Android, is `ndk-context` 0.1, which shares android-activity's copy.
