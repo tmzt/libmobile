@@ -130,6 +130,7 @@ fn main() {
     libmobile::gradle::Project::new("com.example.app")
         .label("Example")
         .permission("android.permission.INTERNET")       // optional
+        .url_scheme("example")                            // optional: open on example:// links
         .extra_script("android/extra.gradle.kts")         // optional, applied last
         .generate()
         .expect("gradle project");
@@ -160,6 +161,21 @@ In your manifest, set the activity to `dev.highbay.libmobile.MobileNativeActivit
 set `android:launchMode="singleTop"` so `onNewIntent` reaches the running
 instance. Plugin permissions and manifest entries are still merged in by
 `libmobile.gradle`.
+
+To open the app from `myapp://` links (what `Project::url_scheme("myapp")`
+generates), add a filter to the activity:
+
+```xml
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="myapp" />
+</intent-filter>
+```
+
+The link arrives as a `MobileEvent::Intent` whose `data` is the URL.
+libmobile logs it only up to its path (`intent::redact_url`).
 
 ### Gradle: through a wrapper crate
 

@@ -41,9 +41,36 @@ impl IntentData {
     }
 }
 
+/// The scheme, host, port and path of `url`, followed by `<redacted>` if
+/// a query or fragment was cut off. A URL's query or fragment may hold a
+/// secret (a pairing token), so this is what libmobile logs.
+pub fn redact_url(url: &str) -> String {
+    match url.find(['?', '#']) {
+        Some(end) => format!("{}<redacted>", &url[..end]),
+        None => url.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn redact_url_cuts_query_and_fragment() {
+        for (url, redacted) in [
+            (
+                "handlr://h.ts.net:7347/pair#handlr1abc",
+                "handlr://h.ts.net:7347/pair<redacted>",
+            ),
+            ("a://h/p?k=v", "a://h/p<redacted>"),
+            ("a://h/p?k=v#f", "a://h/p<redacted>"),
+            ("a://h/p", "a://h/p"),
+            ("", ""),
+            ("not a url", "not a url"),
+        ] {
+            assert_eq!(redact_url(url), redacted, "{url}");
+        }
+    }
 
     #[test]
     fn extra_lookup() {

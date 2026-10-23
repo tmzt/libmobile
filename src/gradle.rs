@@ -141,6 +141,7 @@ pub struct Project {
     spec: GradleProject,
     out_dir: Option<PathBuf>,
     env_prefix: String,
+    url_schemes: Vec<String>,
 }
 
 impl Project {
@@ -154,6 +155,7 @@ impl Project {
             spec: GradleProject::new(application_id, &lib),
             out_dir: None,
             env_prefix: normalize_prefix(DEFAULT_ENV_PREFIX),
+            url_schemes: Vec::new(),
         }
     }
 
@@ -187,6 +189,23 @@ impl Project {
     /// An app-level `uses-permission` (plugins declare their own).
     pub fn permission(mut self, name: &str) -> Self {
         self.spec.permissions.push(name.to_string());
+        self
+    }
+
+    /// Open the app for links with this scheme (`handlr` for `handlr://…`).
+    /// Lowercase letters, digits, `+`, `-` and `.`, starting with a letter
+    /// (RFC 3986); panics otherwise. May be called more than once. The link
+    /// arrives as a `MobileEvent::Intent` with action
+    /// `android.intent.action.VIEW` and the URL as its `data`.
+    pub fn url_scheme(mut self, scheme: &str) -> Self {
+        assert!(
+            valid_scheme(scheme),
+            "libmobile: invalid URL scheme {scheme:?} (lowercase letters, digits, +, - and ., \
+             starting with a letter)"
+        );
+        if !self.url_schemes.iter().any(|s| s == scheme) {
+            self.url_schemes.push(scheme.to_string());
+        }
         self
     }
 
@@ -265,6 +284,11 @@ impl Project {
                 .join(env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "app".into())),
         };
         for (name, contents) in self.spec.render(&libmobile_gradle, &native_lib, abi) {
+            let contents = if name == MANIFEST {
+                with_url_schemes(&contents, &self.url_schemes)
+            } else {
+                contents
+            };
             write_if_changed(&dir.join(name), &contents)?;
         }
         // Remember the SDK cargo was run with, so a bare `gradle -p <dir>`
@@ -277,6 +301,30 @@ impl Project {
         }
         Ok(Some(dir))
     }
+}
+
+const MANIFEST: &str = "app/src/main/AndroidManifest.xml";
+
+/// RFC 3986 `scheme`, lowercase only (Android matches schemes
+/// case-sensitively, and links arrive lowercased).
+fn valid_scheme(scheme: &str) -> bool {
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "+-.".contains(c))
+}
+
+/// The rendered manifest with a VIEW filter per scheme, before the end of
+/// the activity element.
+fn with_url_schemes(manifest: &str, schemes: &[String]) -> String {
+    if schemes.is_empty() {
+        return manifest.to_string();
+    }
+    let filters = codegen::url_scheme_filters(schemes);
+    manifest.replacen(
+        "        </activity>",
+        &format!("{filters}        </activity>"),
+        1,
+    )
 }
 
 /// `sdk.dir`, escaped for a `.properties` file (`\\` and `:` are special).
@@ -322,6 +370,36 @@ fn write_if_changed(path: &Path, contents: &str) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn url_schemes_are_validated() {
+        for ok in ["handlr", "libmobile-wgpu", "a1+b.c"] {
+            assert!(valid_scheme(ok), "{ok}");
+        }
+        for bad in ["", "1abc", "Handlr", "a b", "a:b", "-a", "ä"] {
+            assert!(!valid_scheme(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid URL scheme")]
+    fn url_scheme_panics_on_invalid() {
+        let _ = Project::new("dev.example.app").url_scheme("Bad");
+    }
+
+    #[test]
+    fn url_schemes_go_inside_the_activity() {
+        let spec = GradleProject::new("dev.example.app", "example_app");
+        let files = spec.render(Path::new("/l.gradle"), Path::new("/l.so"), "arm64-v8a");
+        let manifest = &files.iter().find(|(n, _)| *n == MANIFEST).unwrap().1;
+        assert_eq!(with_url_schemes(manifest, &[]), *manifest);
+        let with = with_url_schemes(manifest, &["handlr".into()]);
+        let filter = with.find("android:scheme=\"handlr\"").unwrap();
+        let launcher = with.find("android.intent.category.LAUNCHER").unwrap();
+        let end = with.find("</activity>").unwrap();
+        assert!(launcher < filter && filter < end);
+        assert_eq!(with.matches("</activity>").count(), 1);
+    }
 
     #[test]
     fn prefixes_name_the_links_key() {

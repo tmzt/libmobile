@@ -612,6 +612,28 @@ apply(from = {libmobile})
     }
 }
 
+/// One VIEW intent filter per scheme, for the activity element of the
+/// manifest, so links with those schemes open the app. Indented to sit
+/// inside `<activity>`; empty for no schemes.
+pub fn url_scheme_filters(schemes: &[String]) -> String {
+    schemes
+        .iter()
+        .map(|scheme| {
+            format!(
+                "
+            <intent-filter>
+                <action android:name=\"android.intent.action.VIEW\" />
+                <category android:name=\"android.intent.category.DEFAULT\" />
+                <category android:name=\"android.intent.category.BROWSABLE\" />
+                <data android:scheme=\"{}\" />
+            </intent-filter>
+",
+                xml_attr(scheme)
+            )
+        })
+        .collect()
+}
+
 /// The Android ABI directory for a Rust target triple.
 pub fn android_abi(target: &str) -> Option<&'static str> {
     match target.split('-').next()? {
@@ -943,6 +965,18 @@ mod tests {
         assert!(manifest.contains("android:label=\"A &amp; B\""));
         assert!(manifest.contains("android.permission.INTERNET"));
         assert!(manifest.contains("android:launchMode=\"singleTop\""));
+    }
+
+    #[test]
+    fn url_scheme_filters_one_per_scheme() {
+        assert_eq!(url_scheme_filters(&[]), "");
+        let xml = url_scheme_filters(&["handlr".into(), "b-2".into()]);
+        assert_eq!(xml.matches("<intent-filter>").count(), 2);
+        assert_eq!(xml.matches("android.intent.action.VIEW").count(), 2);
+        assert_eq!(xml.matches("android.intent.category.BROWSABLE").count(), 2);
+        assert!(xml.contains("<data android:scheme=\"handlr\" />"));
+        assert!(xml.contains("<data android:scheme=\"b-2\" />"));
+        assert!(!xml.contains("autoVerify"));
     }
 
     #[test]

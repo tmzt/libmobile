@@ -5,7 +5,7 @@
 //! `NativeActivity` swallows). Runs on the UI thread, so it only queues.
 
 use super::jni_util::opt_string;
-use crate::intent::IntentData;
+use crate::intent::{IntentData, redact_url};
 use crate::mailbox::Mailbox;
 use jni::objects::{JObject, JObjectArray, JString};
 use jni::sys::jboolean;
@@ -52,7 +52,14 @@ pub extern "system" fn Java_dev_highbay_libmobile_bridge_IntentPlugin_nativeInte
             extras: IntentData::zip_extras(strings(env, &keys)?, strings(env, &values)?),
             is_new,
         };
-        log::info!("libmobile: intent {intent:?}");
+        // Never the full URL or the extras' values: either may hold a secret.
+        let keys: Vec<&str> = intent.extras.iter().map(|(k, _)| k.as_str()).collect();
+        log::info!(
+            "libmobile: intent action={:?} data={:?} extras={keys:?} is_new={}",
+            intent.action,
+            intent.data.as_deref().map(redact_url),
+            intent.is_new,
+        );
         PENDING.push(intent);
         Ok(())
     });

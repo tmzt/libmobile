@@ -1,7 +1,7 @@
 ---
 title: Declaring URL schemes, and redacting the intent log
 date: 2026-10-22
-status: Draft
+status: In implementation
 covers:
   - "`gradle::Project::url_scheme`: VIEW intent filters for custom URL
     schemes in the generated manifest"
@@ -133,3 +133,8 @@ The `wgpu` example declares `url_scheme("libmobile-wgpu")` and logs each
 The owner approved this plan, with libmorph's, on 2026-10-22. It stays
 `Draft` until the first commit that implements it. The open question in
 section 6 is answered after step 2, if it arises.
+
+## Amendment — 2026-10-22 23:33 EDT: implementation has started; the document is now immutable
+
+Step 1 starts with this commit. The document now changes only on the
+owner's explicit instruction.
