@@ -236,3 +236,10 @@ button, a wake-lock toggle). Three open questions: background capture in
 the S23 check, swipe-away, and the wake lock at start.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-23 18:09 EDT — Foreground service approved
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (Draft, approved).
+The owner approved it; section 7's recommendations stand (background
+capture is checked, swipe-away stops the service by default, the wake
+lock starts released). The release after it is 0.2.3.
