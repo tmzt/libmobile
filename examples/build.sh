@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build (and optionally install + launch) a libmobile example APK.
 #
-#   examples/build.sh bitmap|wgpu|audiocapture|securestore [--install] [-- <extra cargo args>]
+#   examples/build.sh bitmap|wgpu|audiocapture|securestore|background [--install] [-- <extra cargo args>]
 #
 # Two stages, and no Gradle files in the repo: the example's build.rs writes
 # the whole Gradle project (libmobile::gradle) while cargo builds the .so, and
@@ -12,7 +12,7 @@
 # ANDROID_NDK_ROOT and JAVA_HOME.
 set -euo pipefail
 
-EXAMPLE="${1:?usage: examples/build.sh bitmap|wgpu|audiocapture|securestore [--install] [-- cargo args]}"
+EXAMPLE="${1:?usage: examples/build.sh bitmap|wgpu|audiocapture|securestore|background [--install] [-- cargo args]}"
 shift
 INSTALL=0
 CARGO_EXTRA=()
