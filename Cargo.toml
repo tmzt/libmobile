@@ -35,6 +35,12 @@ camera = []
 # thread (android/java/dev/highbay/libmobile/service, src/android/service.rs,
 # src/android/battery.rs). Declare it with `gradle::Project::foreground_service`.
 foreground-service = []
+# System events for the app's own threads, from any thread, with no async
+# runtime (android/java/dev/highbay/libmobile/events, src/system_events.rs):
+# visibility, focus, the service, the default network and Doze.
+system-events = []
+# `system_events::subscribe_tokio`, a tokio receiver for system events.
+tokio = ["system-events", "dep:tokio"]
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and
 # input). No Kotlin plugin. Also ndk's AAudio API (`ndk::audio`), with
 # the API 28 calls for input presets cpal cannot set (libmorph's capture
@@ -57,6 +63,8 @@ crate-type = ["lib"]
 log = "0.4"
 # Clears key material the key store holds (`key_store`).
 zeroize = { version = "1.8", features = ["derive"] }
+# `system_events::subscribe_tokio` (feature `tokio`): an unbounded channel only.
+tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

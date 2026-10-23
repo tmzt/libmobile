@@ -159,6 +159,17 @@ pub const PLUGINS: &[Plugin] = &[
         class: "service.ForegroundServicePlugin",
         contributes: Contributes::NOTHING,
     },
+    // Visibility, network and Doze callbacks on the Application
+    // (`events/`, `src/android/system_events.rs`).
+    Plugin {
+        feature: Some("system-events"),
+        dir: "events",
+        class: "events.SystemEventsPlugin",
+        contributes: Contributes {
+            permissions: &["android.permission.ACCESS_NETWORK_STATE"],
+            ..Contributes::NOTHING
+        },
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -848,6 +859,7 @@ mod tests {
                 "google-auth",
                 "camera",
                 "foreground-service",
+                "system-events",
                 "secure-store-no-strongbox"
             ]
         );
@@ -922,6 +934,21 @@ mod tests {
         assert_eq!(ServiceType::Microphone.bits(), 128);
         assert_eq!(ServiceType::RemoteMessaging.bits(), 512);
         assert_eq!(ServiceType::SpecialUse("").bits(), 1 << 30);
+    }
+
+    #[test]
+    fn system_events_plugin_reads_network_state() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "events"));
+        let active = active_plugins(&["system-events"]);
+        assert!(
+            active
+                .iter()
+                .any(|p| p.class == "events.SystemEventsPlugin")
+        );
+        assert_eq!(
+            merge(&active).permissions,
+            ["android.permission.ACCESS_NETWORK_STATE"]
+        );
     }
 
     #[test]

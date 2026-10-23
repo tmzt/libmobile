@@ -308,5 +308,7 @@ pub extern "system" fn Java_dev_highbay_libmobile_service_ForegroundServicePlugi
 
 /// To the main loop (and, under `system-events`, to subscribers).
 fn deliver(event: ServiceEvent) {
+    #[cfg(feature = "system-events")]
+    crate::system_events::publish(crate::system_events::SystemEvent::Service(event.clone()));
     EVENTS.push(event);
 }

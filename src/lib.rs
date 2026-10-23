@@ -74,7 +74,7 @@ pub mod mailbox;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]
 pub mod service;
-#[cfg(feature = "foreground-service")]
+#[cfg(any(feature = "foreground-service", feature = "system-events"))]
 pub mod system_events;
 pub mod worker;
 

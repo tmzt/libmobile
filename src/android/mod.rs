@@ -35,6 +35,8 @@ pub mod secure_store;
 #[cfg(feature = "foreground-service")]
 pub mod service;
 pub mod surface;
+#[cfg(feature = "system-events")]
+pub(crate) mod system_events;
 pub mod text_input;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.

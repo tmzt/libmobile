@@ -37,6 +37,7 @@ android/java/dev/highbay/libmobile/
   auth/                     feature "google-auth": Credential Manager sign-in
   camera/                   feature "camera": capture through the system camera app
   service/                  feature "foreground-service": the foreground service and its notification
+  events/                   feature "system-events": visibility, network and Doze callbacks
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
   gradle.rs                 generates the Gradle project from the app's build.rs
@@ -56,6 +57,8 @@ examples/
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
 | `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
 | `foreground-service` | `service/ForegroundServicePlugin` | `android::service`, `android::battery`; `MobileEvent::Service` |
+| `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
+| `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 
 ## Usage
 
@@ -189,6 +192,30 @@ Button taps, Exit and the service's own changes arrive as
 `MobileEvent::Service(ServiceEvent::…)`. Exit stops the service, delivers
 `Exited` and finishes the activity; the app's threads end themselves.
 `android::battery` checks and asks for the battery-optimization exemption.
+
+### System events
+
+With the `system-events` feature, any thread can follow what happens to the
+app, without the main loop or an async runtime:
+
+```rust
+use libmobile::system_events::{self, SystemEvent};
+
+let events = system_events::subscribe();
+std::thread::spawn(move || loop {
+    match events.next_blocking() {
+        SystemEvent::Visible(seen) => log::info!("visible: {seen}"),
+        SystemEvent::Network(None) => log::info!("no network"),
+        SystemEvent::DeviceIdle(false) => { /* Doze ended: reconnect */ }
+        _ => {}
+    }
+});
+```
+
+Events are visibility, focus, the foreground service, the default network
+and Doze. Each subscriber gets every event after it subscribes, in order.
+`system_events::current()` gives the latest of each kind. With the `tokio`
+feature, `subscribe_tokio()` returns a tokio `UnboundedReceiver` instead.
 
 ### Gradle: your own project
 
