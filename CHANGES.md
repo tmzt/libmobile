@@ -252,3 +252,51 @@ starts `specialUse` only, and step 4 has no capture check. Android stops
 microphone input when the app is hidden. `ServiceType::Microphone` stays
 in the API. libmorph's plan was approved at the same time and wraps this
 one.
+
+## 2026-10-23 18:30 EDT — Foreground service: departures in steps 1 to 3
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (In
+implementation). Small departures needed to make the plan work, none of
+them changing its types, calls or behaviour:
+
+- Step 1. `NotificationAction` and `ServiceOptions` have no `Default`
+  and are `#[non_exhaustive]`, so another crate could not build them at
+  all, and `Controls { ongoing: true, .. }` does not compile outside the
+  crate. Added `NotificationAction::new(id, label)`,
+  `ServiceOptions::new(types, content)` and
+  `NotificationContent::new(title, text)`; the fields stay public and are
+  set after. `ControlLabels`, which the plan names but does not define, has
+  `exit`, `acquire_wake_lock`, `release_wake_lock` and `wake_lock_held`,
+  a `Default` with the plan's text, and is `#[non_exhaustive]` like the
+  rest.
+- Step 1. The platform-free types live in `libmobile::service` (as the
+  secure store's do in `libmobile::secure_store`) and are re-exported from
+  `libmobile::android::service`, so they build and test on the host.
+  `ServiceType` is defined in `codegen`, which build.rs also compiles, and
+  re-exported as `gradle::ServiceType` and `android::service::ServiceType`.
+  `MAX_ACTIONS`, `EXIT_ACTION` and `WAKE_LOCK_ACTION` name the limit and
+  the reserved ids.
+- Step 1. `stop()` while stopped returns `Ok`; the plan lists
+  `NotRunning` only for update, set_wake_lock and actions.
+  `foreground_service(&[])` panics, as `url_scheme` does on a bad scheme:
+  Android needs a type. Several `SpecialUse` reasons: the first is used.
+- Step 1. `ServiceEvent` lives in `libmobile::system_events`, which is
+  compiled under `foreground-service` or `system-events`; the subscriber
+  calls are under `system-events` only, so `MobileEvent::Service` works
+  without it.
+- Step 2 (`88bfe52`). The activity lifecycle callbacks are registered at
+  the first activity's `onCreate`, not at the first `subscribe()`, and
+  report only once Rust has subscribed. Registered at subscribe time, they
+  miss the current activity's `onStart`/`onResume`, and counting it from
+  the process importance can be wrong. The network callback and the Doze
+  receiver are still registered at the first `subscribe()`. The first
+  `subscribe()` also reports the state at that moment (`Visible`,
+  `Focused`, `DeviceIdle`, and the network through its callback).
+- Step 3. Without the microphone, on the owner's change of scope (relayed
+  by the coordinator; the plan's amendment is the coordinator's): the
+  example declares and starts with `specialUse` only and opens no capture
+  stream. `ServiceType::Microphone` stays in the API and the manifest code.
+- Step 3. The example has no Kotlin, so there is no `am broadcast` hook.
+  `--es cmd start-later [--es delay <s>]` stops the service, then starts it
+  again from a thread after the delay, so a start from the background can
+  be tried after Home.
