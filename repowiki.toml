@@ -1,0 +1,11 @@
+# repowiki.toml
+# Read by repowiki's collector from the repository root.
+
+# Landing page of the registered site.
+default_route = "/README"
+
+[crate_resolution]
+# Only these folders become navigation groups; docs/design/*.md is grouped
+# as a "design" package, one entry per plan. examples/ holds the example
+# crates.
+prefixes = ["docs", "examples"]
