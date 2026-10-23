@@ -224,3 +224,15 @@ On the owner's S23 Ultra, with `am start -a android.intent.action.VIEW`:
 `secret` appeared in logcat only in adbd's record of the shell command,
 never from the app. `singleTop` is enough, so the plan's open question
 does not arise.
+
+## 2026-10-23 18:06 EDT — Foreground service, notification controls and system events (proposed)
+
+Plan: `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md` (Draft). Written
+at the owner's request, relayed by the handlr session, as the libmobile
+half of libmorph's `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`,
+with that plan's amendments folded in. New from the owner: Termux-style
+controls set at start (a notification that cannot be swiped away, an Exit
+button, a wake-lock toggle). Three open questions: background capture in
+the S23 check, swipe-away, and the wake lock at start.
+
+Proposed only; nothing is implemented until the owner approves.
