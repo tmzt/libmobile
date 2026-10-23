@@ -46,6 +46,17 @@ mod app {
                 MobileEvent::Resume => self.resumed = true,
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
+                // A `libmobile-wgpu://` link (see build.rs). Logged redacted:
+                // its query or fragment may be a secret.
+                MobileEvent::Intent(intent) => {
+                    if let Some(url) = intent.data.as_deref() {
+                        log::info!(
+                            "wgpu example: opened with {} (is_new: {})",
+                            libmobile::intent::redact_url(url),
+                            intent.is_new
+                        );
+                    }
+                }
                 _ => {}
             }
         }
