@@ -1,7 +1,7 @@
 package dev.highbay.libmobile.store
 
-import android.app.Activity
 import android.app.KeyguardManager
+import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
@@ -49,7 +49,8 @@ import javax.crypto.spec.GCMParameterSpec
  *
  * Failures are thrown as [SecureStoreException] with a `"<kind>: <detail>"`
  * message (`keystore`, `io`, `corrupt`, `device-locked`), which Rust maps to its error type.
- * Every method is synchronous and may be called from any thread.
+ * Every method is synchronous and may be called from any thread. Rust passes
+ * the Application (from `ndk-context`), so no activity is needed.
  */
 object SecureStorePlugin : MobileActivityPlugin {
     private const val ALIAS = "libmobile.secure-store.v1"
@@ -71,10 +72,10 @@ object SecureStorePlugin : MobileActivityPlugin {
 
     class SecureStoreException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    /** Called from Rust via JNI: static, `(Landroid/app/Activity;Ljava/lang/String;)[B`. `null` if absent. */
+    /** Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;)[B`. `null` if absent. */
     @JvmStatic
-    fun get(activity: Activity, name: String): ByteArray? = synchronized(lock) {
-        val file = blob(activity, name)
+    fun get(context: Context, name: String): ByteArray? = synchronized(lock) {
+        val file = blob(context, name)
         val data = try {
             if (!file.exists()) return null
             file.readBytes()
@@ -84,7 +85,7 @@ object SecureStorePlugin : MobileActivityPlugin {
         val ivLen = parseHeader(data)
         val unlocked = data[5].toInt() and FLAG_UNLOCKED != 0
         try {
-            val key = key(activity, unlocked, create = false)
+            val key = key(context, unlocked, create = false)
                 ?: throw SecureStoreException("corrupt: the store's key is missing")
             val cipher = Cipher.getInstance(TRANSFORM)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, data, HEADER, ivLen))
@@ -105,15 +106,15 @@ object SecureStorePlugin : MobileActivityPlugin {
     }
 
     /**
-     * Called from Rust via JNI: static, `(Landroid/app/Activity;Ljava/lang/String;[BI)V`.
+     * Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;[BI)V`.
      * [flags] bit 0 wraps the blob with the key that needs the device unlocked.
      */
     @JvmStatic
-    fun put(activity: Activity, name: String, value: ByteArray, flags: Int): Unit = synchronized(lock) {
+    fun put(context: Context, name: String, value: ByteArray, flags: Int): Unit = synchronized(lock) {
         val sealed = try {
             require(flags and FLAG_UNLOCKED.inv() == 0) { "unknown flags $flags" }
             val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.ENCRYPT_MODE, key(activity, flags and FLAG_UNLOCKED != 0, create = true))
+            cipher.init(Cipher.ENCRYPT_MODE, key(context, flags and FLAG_UNLOCKED != 0, create = true))
             val iv = cipher.iv
             val header = MAGIC + byteArrayOf(VERSION, flags.toByte(), iv.size.toByte())
             cipher.updateAAD(header)
@@ -128,7 +129,7 @@ object SecureStorePlugin : MobileActivityPlugin {
         } finally {
             value.fill(0)
         }
-        val file = blob(activity, name)
+        val file = blob(context, name)
         val tmp = File(file.path + ".tmp")
         try {
             file.parentFile?.mkdirs()
@@ -143,10 +144,10 @@ object SecureStorePlugin : MobileActivityPlugin {
         }
     }
 
-    /** Called from Rust via JNI: static, `(Landroid/app/Activity;Ljava/lang/String;)Z`. `true` if removed. */
+    /** Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;)Z`. `true` if removed. */
     @JvmStatic
-    fun delete(activity: Activity, name: String): Boolean = synchronized(lock) {
-        val file = blob(activity, name)
+    fun delete(context: Context, name: String): Boolean = synchronized(lock) {
+        val file = blob(context, name)
         File(file.path + ".tmp").delete()
         if (!file.exists()) return false
         if (!file.delete()) throw SecureStoreException("io: could not delete ${file.name}")
@@ -154,13 +155,13 @@ object SecureStorePlugin : MobileActivityPlugin {
     }
 
     /**
-     * Called from Rust via JNI: static, `(Landroid/app/Activity;)I`. Where the
+     * Called from Rust via JNI: static, `(Landroid/content/Context;)I`. Where the
      * key lives: 0 software, 1 TEE, 2 StrongBox. Creates the key if needed.
      */
     @JvmStatic
-    fun securityLevel(@Suppress("UNUSED_PARAMETER") activity: Activity): Int = synchronized(lock) {
+    fun securityLevel(@Suppress("UNUSED_PARAMETER") context: Context): Int = synchronized(lock) {
         try {
-            val key = key(activity, unlocked = false, create = true)!!
+            val key = key(context, unlocked = false, create = true)!!
             val info = SecretKeyFactory.getInstance(key.algorithm, PROVIDER)
                 .getKeySpec(key, KeyInfo::class.java) as KeyInfo
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -180,8 +181,8 @@ object SecureStorePlugin : MobileActivityPlugin {
         }
     }
 
-    private fun blob(activity: Activity, name: String): File =
-        File(File(activity.noBackupFilesDir, DIR), name + SUFFIX)
+    private fun blob(context: Context, name: String): File =
+        File(File(context.noBackupFilesDir, DIR), name + SUFFIX)
 
     /** Checks the header and returns the IV length. */
     private fun parseHeader(data: ByteArray): Int {
@@ -204,8 +205,8 @@ object SecureStorePlugin : MobileActivityPlugin {
      * [unlocked] key is refused while the device is locked, reported as
      * `locked` before Keystore is asked.
      */
-    private fun key(activity: Activity, unlocked: Boolean, create: Boolean): SecretKey? {
-        if (unlocked && activity.getSystemService(KeyguardManager::class.java).isDeviceLocked) {
+    private fun key(context: Context, unlocked: Boolean, create: Boolean): SecretKey? {
+        if (unlocked && context.getSystemService(KeyguardManager::class.java).isDeviceLocked) {
             throw SecureStoreException("device-locked: the device is locked")
         }
         val alias = if (unlocked) UNLOCKED_ALIAS else ALIAS

@@ -60,6 +60,10 @@ raw-window-handle = "0.6"
 # Pinned to the same 0.22 android-activity resolves, so there is a single
 # `JavaVM` singleton in the process.
 jni = "0.22"
+# The JavaVM and the Application, which android-activity registers once per
+# process: the secure store reaches Keystore and its files through them, from
+# any thread and without an activity. Shares android-activity's copy.
+ndk-context = "0.1"
 cpal = { version = "0.18.2", optional = true }
 
 [workspace]

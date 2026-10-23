@@ -21,25 +21,64 @@ pub(crate) fn with_app_class<R>(
     f: impl FnOnce(&mut Env<'_>, &JObject<'_>, &JClass<'_>) -> jni::errors::Result<R>,
 ) -> jni::errors::Result<R> {
     with_activity(app, |env, activity| {
-        let loader = env
-            .call_method(
-                activity,
-                jni_str!("getClassLoader"),
-                jni_sig!("()Ljava/lang/ClassLoader;"),
-                &[],
-            )?
-            .l()?;
-        let name = JString::from_str(env, class_name)?;
-        let loaded = env
-            .call_method(
-                &loader,
-                jni_str!("loadClass"),
-                jni_sig!("(Ljava/lang/String;)Ljava/lang/Class;"),
-                &[(&name).into()],
-            )?
-            .l()?;
-        let class = env.cast_local::<JClass>(loaded)?;
+        let class = load_class(env, activity, class_name)?;
         f(env, activity, &class)
+    })
+}
+
+/// [`with_app_class`] without an `AndroidApp`: the Application from
+/// `ndk-context`, which android-activity registers once per process before
+/// `android_main`. Valid from any thread and across `android_main` runs.
+pub(crate) fn with_application_class<R>(
+    class_name: &str,
+    f: impl FnOnce(&mut Env<'_>, &JObject<'_>, &JClass<'_>) -> jni::errors::Result<R>,
+) -> jni::errors::Result<R> {
+    with_application(|env, application| {
+        let class = load_class(env, application, class_name)?;
+        f(env, application, &class)
+    })
+}
+
+/// `context.getClassLoader().loadClass(class_name)`; see [`with_app_class`]
+/// for why it is the `Context` method.
+fn load_class<'local>(
+    env: &mut Env<'local>,
+    context: &JObject<'_>,
+    class_name: &str,
+) -> jni::errors::Result<JClass<'local>> {
+    let loader = env
+        .call_method(
+            context,
+            jni_str!("getClassLoader"),
+            jni_sig!("()Ljava/lang/ClassLoader;"),
+            &[],
+        )?
+        .l()?;
+    let name = JString::from_str(env, class_name)?;
+    let loaded = env
+        .call_method(
+            &loader,
+            jni_str!("loadClass"),
+            jni_sig!("(Ljava/lang/String;)Ljava/lang/Class;"),
+            &[(&name).into()],
+        )?
+        .l()?;
+    env.cast_local::<JClass>(loaded)
+}
+
+/// Attach this thread to the VM and run `f` with the Application.
+#[allow(unsafe_code)] // Scoped: one documented `as_cast_raw` on a pointer android-activity owns.
+pub(crate) fn with_application<R>(
+    f: impl FnOnce(&mut Env<'_>, &JObject<'_>) -> jni::errors::Result<R>,
+) -> jni::errors::Result<R> {
+    let vm = jni::JavaVM::singleton()?;
+    let raw_application: jobject = ndk_context::android_context().context().cast();
+    vm.attach_current_thread(|env: &mut Env| {
+        // SAFETY: `raw_application` is a JNI global reference android-activity
+        // created for `ndk-context` and never deletes (it lives for the
+        // process); `Cast` borrows it without taking ownership.
+        let application = unsafe { env.as_cast_raw::<Global<JObject>>(&raw_application)? };
+        f(env, &application)
     })
 }
 
