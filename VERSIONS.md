@@ -76,3 +76,16 @@ additions. The commit is the one tagged `v0.2.1`.
   generated.
 - **Dependencies:** `zeroize` 1.8 (with `derive`) is new, and so, on
   Android, is `ndk-context` 0.1, which shares android-activity's copy.
+
+## 0.2.2 — 2026-10-22 (tag `v0.2.2`)
+
+URL schemes (`docs/design/20261022_05_URL_SCHEMES_PLAN.md`). All
+additions. The commit is the one tagged `v0.2.2`.
+
+- `gradle::Project::url_scheme(scheme)`: the generated manifest's activity
+  gets a `VIEW`/`DEFAULT`/`BROWSABLE` intent filter for the scheme, with no
+  App Links. Links reach the app as `MobileEvent::Intent`, as other
+  intents do.
+- `codegen::url_scheme_filters(&[String]) -> String`, the filters' XML.
+- `intent::redact_url(&str) -> String`: a URL cut after its path. The
+  intent log line now uses it and leaves out extra values. That is not API.
