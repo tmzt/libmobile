@@ -183,3 +183,15 @@ On the owner's S23 Ultra:
 
 Not yet checked: reading an `unlocked_only` blob written while unlocked,
 which needs the owner to unlock the phone.
+
+## 2026-10-22 20:58 EDT — Unlock-required keys and blobs on the S23
+
+Plans: `docs/design/20261022_03_SECURE_STORE_PLAN.md` and libmorph
+`docs/design/20261022_06_KEY_STORE_PLAN.md` (steps 1 and 4).
+
+With the owner's S23 Ultra unlocked (`deviceLocked=0`), the `securestore`
+example generated key `device-unlocked` (`FLAG_DEVICE_UNLOCK_REQUIRED`),
+used it inside `with_key`, and wrote and read back the `unlocked_only`
+blob. After the screen was turned off over adb (`deviceLocked=1`), the
+worker thread's next reads of both gave `DeviceLocked`. Key `device`
+(no flags) loaded with the same fingerprint as before.
