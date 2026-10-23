@@ -19,7 +19,7 @@ use jni::{Env, jni_sig, jni_str};
 const STORE_CLASS: &str = "dev.highbay.libmobile.store.SecureStorePlugin";
 
 /// The blob called `name`, or `None` if there is none.
-/// [`SecureStoreError::Locked`] for an `unlocked_only` blob while the device
+/// [`SecureStoreError::DeviceLocked`] for an `unlocked_only` blob while the device
 /// is locked.
 pub fn get(app: &AndroidApp, name: &str) -> Result<Option<Vec<u8>>, SecureStoreError> {
     check_name(name)?;
@@ -49,7 +49,7 @@ pub fn put(app: &AndroidApp, name: &str, value: &[u8]) -> Result<(), SecureStore
 
 /// [`put`] with options: [`PutOptions::unlocked_only`] wraps the blob with
 /// a key Keystore refuses while the device is locked, so [`get`] gives
-/// [`SecureStoreError::Locked`] until it is unlocked.
+/// [`SecureStoreError::DeviceLocked`] until it is unlocked.
 pub fn put_with(
     app: &AndroidApp,
     name: &str,
@@ -103,7 +103,7 @@ pub fn security_level(app: &AndroidApp) -> Result<SecurityLevel, SecureStoreErro
         .i()
     })?;
     SecurityLevel::from_code(code)
-        .ok_or_else(|| SecureStoreError::Jni(format!("unknown security level {code}")))
+        .ok_or_else(|| SecureStoreError::Platform(format!("unknown security level {code}")))
 }
 
 /// Run `f` against the plugin class, turning a thrown `SecureStoreException`
@@ -127,6 +127,6 @@ fn call<R>(
     })
     .map_err(|err| match err {
         jni::errors::Error::CaughtJavaException { msg, .. } => SecureStoreError::from_message(&msg),
-        other => SecureStoreError::Jni(other.to_string()),
+        other => SecureStoreError::Platform(other.to_string()),
     })
 }

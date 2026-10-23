@@ -48,7 +48,7 @@ import javax.crypto.spec.GCMParameterSpec
  * and then moved over the blob.
  *
  * Failures are thrown as [SecureStoreException] with a `"<kind>: <detail>"`
- * message (`keystore`, `io`, `corrupt`, `locked`), which Rust maps to its error type.
+ * message (`keystore`, `io`, `corrupt`, `device-locked`), which Rust maps to its error type.
  * Every method is synchronous and may be called from any thread.
  */
 object SecureStorePlugin : MobileActivityPlugin {
@@ -92,7 +92,7 @@ object SecureStorePlugin : MobileActivityPlugin {
             cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
             cipher.doFinal(data, HEADER + ivLen, data.size - HEADER - ivLen)
         } catch (e: UserNotAuthenticatedException) {
-            throw fail("locked", e)
+            throw fail("device-locked", e)
         } catch (e: AEADBadTagException) {
             throw fail("corrupt", e)
         } catch (e: KeyPermanentlyInvalidatedException) {
@@ -120,7 +120,7 @@ object SecureStorePlugin : MobileActivityPlugin {
             cipher.updateAAD(name.toByteArray(Charsets.UTF_8))
             header + iv + cipher.doFinal(value)
         } catch (e: UserNotAuthenticatedException) {
-            throw fail("locked", e)
+            throw fail("device-locked", e)
         } catch (e: GeneralSecurityException) {
             throw fail("keystore", e)
         } catch (e: ProviderException) {
@@ -206,7 +206,7 @@ object SecureStorePlugin : MobileActivityPlugin {
      */
     private fun key(activity: Activity, unlocked: Boolean, create: Boolean): SecretKey? {
         if (unlocked && activity.getSystemService(KeyguardManager::class.java).isDeviceLocked) {
-            throw SecureStoreException("locked: the device is locked")
+            throw SecureStoreException("device-locked: the device is locked")
         }
         val alias = if (unlocked) UNLOCKED_ALIAS else ALIAS
         val store = try {

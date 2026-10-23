@@ -23,15 +23,15 @@ pub enum SecureStoreError {
     Keystore(String),
     /// The blob was stored with [`PutOptions::unlocked_only`] and the device
     /// is locked. Try again once it is unlocked.
-    Locked,
+    DeviceLocked,
     /// Reading or writing the blob's file failed.
     Io(String),
     /// The file is malformed, or decryption failed (a renamed or altered
     /// file, or a Keystore key that was lost or invalidated). Not treated as
     /// absent: the app decides whether to delete it and start over.
     Corrupt(String),
-    /// The JNI call itself failed.
-    Jni(String),
+    /// The platform failed (JNI, or an unexpected exception).
+    Platform(String),
 }
 
 impl fmt::Display for SecureStoreError {
@@ -43,10 +43,10 @@ impl fmt::Display for SecureStoreError {
             ),
             Self::TooLarge => write!(f, "secure store: blobs are at most {MAX_VALUE_LEN} bytes"),
             Self::Keystore(detail) => write!(f, "secure store: keystore: {detail}"),
-            Self::Locked => write!(f, "secure store: the device is locked"),
+            Self::DeviceLocked => write!(f, "secure store: the device is locked"),
             Self::Io(detail) => write!(f, "secure store: io: {detail}"),
             Self::Corrupt(detail) => write!(f, "secure store: corrupt: {detail}"),
-            Self::Jni(detail) => write!(f, "secure store: jni: {detail}"),
+            Self::Platform(detail) => write!(f, "secure store: platform: {detail}"),
         }
     }
 }
@@ -55,7 +55,7 @@ impl std::error::Error for SecureStoreError {}
 
 impl SecureStoreError {
     /// The plugin's `"<kind>: <detail>"` exception message. Anything else is
-    /// reported as [`SecureStoreError::Jni`].
+    /// reported as [`SecureStoreError::Platform`].
     #[cfg_attr(not(target_os = "android"), allow(dead_code))] // Used by `android::secure_store`.
     pub(crate) fn from_message(message: &str) -> Self {
         let (kind, detail) = message.split_once(": ").unwrap_or((message, ""));
@@ -64,8 +64,8 @@ impl SecureStoreError {
             "keystore" => Self::Keystore(detail),
             "io" => Self::Io(detail),
             "corrupt" => Self::Corrupt(detail),
-            "locked" => Self::Locked,
-            _ => Self::Jni(message.to_string()),
+            "device-locked" => Self::DeviceLocked,
+            _ => Self::Platform(message.to_string()),
         }
     }
 }
@@ -196,7 +196,7 @@ mod tests {
         );
         assert_eq!(
             SecureStoreError::from_message("java.lang.NullPointerException"),
-            SecureStoreError::Jni("java.lang.NullPointerException".into())
+            SecureStoreError::Platform("java.lang.NullPointerException".into())
         );
     }
 
@@ -205,8 +205,8 @@ mod tests {
         assert_eq!(PutOptions::default().flags(), 0);
         assert_eq!(PutOptions::default().unlocked_only(true).flags(), 1);
         assert_eq!(
-            SecureStoreError::from_message("locked: the device is locked"),
-            SecureStoreError::Locked
+            SecureStoreError::from_message("device-locked: the device is locked"),
+            SecureStoreError::DeviceLocked
         );
     }
 
