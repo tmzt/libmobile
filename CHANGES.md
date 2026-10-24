@@ -733,3 +733,10 @@ libmobile generates the resources and manifest attributes behind a
 host-only `icons` feature; libmorph-build turns it on.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-24 13:55 EDT — App icons approved
+
+Plan: `docs/design/20261024_03_APP_ICON_PLAN.md` (Draft, approved). The
+owner approved the icon plans in libmobile and libmorph, with the
+recommended answers. PNG describes the bitmap sources; the generated
+files are whatever each platform takes.
