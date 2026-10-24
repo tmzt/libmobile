@@ -9,7 +9,9 @@
 //! * A plain thread connects to the host given by an intent extra and writes
 //!   a line every 30 s, logging any reply and putting the count in the
 //!   notification's text. On `Exited` it stops.
-//! * Another thread logs every `SystemEvent`.
+//! * After starting the service, it logs the battery state and, if the app
+//!   is not exempt from battery optimization, shows the Allow/Deny dialog.
+//! * Another thread logs every `SystemEvent`, `BatteryExemption` among them.
 //!
 //! ```sh
 //! nc -lk 7999      # on a computer on the same network
@@ -19,7 +21,8 @@
 //!
 //! More intents (`--es cmd <name>`): `start`, `stop`, `wake-on`,
 //! `wake-off`, `state`, `battery` (ask for the battery exemption),
-//! `battery-settings`, and `start-later` (stop now, then start again after
+//! `battery-settings`, `app-details` and `vendor-battery` (open those
+//! pages and log which opened), and `start-later` (stop now, then start again after
 //! `--es delay <seconds>`, default 8, so that a start from the background
 //! can be tried).
 
@@ -233,6 +236,13 @@ mod app {
                     battery::open_settings()
                 )
             }
+            "app-details" => {
+                log::info!("background: app details: {:?}", battery::open_app_details())
+            }
+            "vendor-battery" => log::info!(
+                "background: vendor battery: {:?}",
+                battery::open_vendor_battery()
+            ),
             "start-later" => {
                 let secs = delay.and_then(|d| d.parse().ok()).unwrap_or(8);
                 log::info!("background: stop: {:?}", service::stop());
@@ -295,6 +305,14 @@ mod app {
                     self.request = None;
                     log::info!("background: permissions {:?}", outcome.permissions);
                     start_service();
+                    let state = battery::state();
+                    log::info!("background: battery {state:?}");
+                    if matches!(&state, Ok(s) if !s.ignoring_optimizations) {
+                        log::info!(
+                            "background: battery request: {:?}",
+                            battery::request_ignore_optimizations()
+                        );
+                    }
                 }
                 MobileEvent::Intent(intent) => {
                     if let Some(host) = intent.extra("host") {

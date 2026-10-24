@@ -10,7 +10,7 @@ name = "libmobile_example_background"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-libmobile = { path = "../..", features = ["foreground-service", "system-events"] }
+libmobile = { path = "../..", features = ["foreground-service", "system-events", "battery"] }
 log = "0.4"
 
 # The host copy, for `libmobile::gradle` in build.rs.
