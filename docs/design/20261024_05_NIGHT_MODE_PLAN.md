@@ -83,3 +83,12 @@ gestures: `set_system_bar_icons(true, true)` gives dark icons and
 `(false, false)` light ones (`dumpsys window` shows the appearance
 flags, and a screenshot shows the icons), with no scrim over the
 navigation bar.
+
+## Amendment — 2026-10-24 15:38 EDT: approved, for libmobile 0.2.6 and libmorph 0.4.3
+
+The owner approved the dark mode plans in libmobile and libmorph on
+2026-10-24 ("approve, yes"), with their system bars amendments and the
+recommended answer to libmorph's question 1 (a hook, not a system event).
+They are built and released with the notification plans, as libmobile
+0.2.6 and libmorph 0.4.3. The status stays `Draft` until the first
+commit that implements it.
