@@ -636,3 +636,29 @@ owner's word ("approve, plan a 0.4.0 with what we've planned"), libmobile
 0.2.4 carries `build_info()` and `MobileEvent::TrimMemory`, so libmorph
 0.4.0 can wrap them with the foreground service, `open_link`, the app
 directories and memory pressure.
+
+## 2026-10-24 13:12 EDT — Trim memory and build info: implementation choices
+
+Plans: `docs/design/20261024_01_TRIM_MEMORY_PLAN.md` and
+`docs/design/20261024_02_BUILD_INFO_PLAN.md`, step 1 of each
+(`0586bec` and `be395e2`). Small choices the plans leave open; no
+public API or behaviour beyond the plans:
+- Trim memory: a level below 5 has no lower known level, so it maps to
+  `RunningModerate`, the lowest, and still arrives (the plan's reason
+  for the rule). Above 80 is `Complete`. Host tests cover each known
+  value, values between, below 5 and above 80.
+- `TrimLevel` is in `libmobile::event`, next to `MobileEvent`, and
+  re-exported as `libmobile::TrimLevel`. `SystemState` is unchanged:
+  `SystemEvent::TrimMemory` is an event, and `current()` does not keep
+  it. The level is published to system-event subscribers from the JNI
+  callback, as the service events are, and queued for the main loop.
+  Queued levels are dropped when `android_main` returns, like the other
+  commands.
+- `TrimMemoryPlugin` registers `ComponentCallbacks2` once per process,
+  at the first activity's `onCreate`; its `onLowMemory` does nothing,
+  since `MobileEvent::LowMemory` keeps coming from NativeActivity.
+- Build info: `BuildInfoPlugin.info()` returns the three values as one
+  `String[]` (manufacturer, brand, model), read through the Application
+  like `DirsPlugin`. `android::build_info()` keeps the first answer in a
+  `OnceLock`; a failed call is logged at warn and tried again next time.
+  `BuildInfo` is also re-exported as `android::BuildInfo`.
