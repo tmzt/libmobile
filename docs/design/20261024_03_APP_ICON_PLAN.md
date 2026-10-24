@@ -155,3 +155,29 @@ the generated manifest does not reference yet.
    that ask for them. Recommended: generate them anyway; they are small.
 3. **The `image` crate** behind `icons`, host-only. Recommended: yes; the
    alternative, `png` plus a hand-written resampler, is more code to own.
+
+## Amendment — 2026-10-24 13:55 EDT: approved; sources are PNGs, outputs are what the platform takes
+
+The owner approved this plan with libmorph's
+`docs/design/20261024_03_APP_ICON_PLAN.md` on 2026-10-24: "approve. the
+format can be whatever the platform needs, png was meant to mean the
+source files would be pngs if bitmaps".
+
+- **Sources and outputs.** "PNG-based" describes the sources: bitmap
+  sources are PNG files. What is generated is whatever each platform
+  takes. For Android that is the table of section 2, written as PNG
+  mipmaps (Android also accepts WebP; the generator may switch to it
+  without an amendment if size matters). Later platforms take their own
+  formats (`.icns` on macOS).
+- **Section 6**, with the recommendations: the master is scaled into the
+  centre 66 dp by default, with `full_bleed()` for adaptive artwork; the
+  legacy PNGs are generated; the `image` crate is used behind `icons`.
+- **Wording.** Section 1's last bullet reads: scaling is Lanczos3 on the
+  sRGB values, as Android's own tools do, without converting to linear
+  light. Section 5's desktop bullet reads: the same `Icon` for the macOS
+  app bundle's `.icns` and for the window icon, built in libdevice and
+  libmorph-build; the window icon would be embedded from the build
+  script's output (an `app_icon!()` macro over `include_bytes!` of a
+  file in the app's `OUT_DIR`), so the app declares the icon once.
+
+The status stays `Draft` until the first commit that implements it.
