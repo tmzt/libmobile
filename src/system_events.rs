@@ -91,6 +91,7 @@ pub use subscribers::*;
 #[cfg(feature = "system-events")]
 mod subscribers {
     use super::ServiceEvent;
+    use crate::event::TrimLevel;
     use std::collections::VecDeque;
     use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 
@@ -116,6 +117,10 @@ mod subscribers {
         /// `subscribe()` reports the value at that moment.
         #[cfg(feature = "battery")]
         BatteryExemption(bool),
+        /// Android asked the app to give back memory
+        /// (`ComponentCallbacks2.onTrimMemory`); also `MobileEvent::TrimMemory`
+        /// on the main loop. An event, not a state: [`current`] does not keep it.
+        TrimMemory(TrimLevel),
     }
 
     /// The default network.
@@ -203,6 +208,7 @@ mod subscribers {
                 SystemEvent::DeviceIdle(v) => self.device_idle = Some(*v),
                 #[cfg(feature = "battery")]
                 SystemEvent::BatteryExemption(v) => self.battery_exemption = Some(*v),
+                SystemEvent::TrimMemory(_) => {}
             }
         }
     }
@@ -407,6 +413,19 @@ mod subscribers {
             assert_eq!(state.service, Some(ServiceEvent::Started));
             publish(SystemEvent::Network(None));
             assert_eq!(current().network, Some(None));
+        }
+
+        #[test]
+        fn trim_memory_reaches_subscribers_and_is_not_kept() {
+            let _turn = lock(&TURN);
+            let events = subscribe();
+            let before = current();
+            publish(SystemEvent::TrimMemory(TrimLevel::Background));
+            assert_eq!(
+                events.try_next(),
+                Some(SystemEvent::TrimMemory(TrimLevel::Background))
+            );
+            assert_eq!(current(), before);
         }
 
         #[cfg(feature = "battery")]

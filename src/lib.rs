@@ -87,7 +87,7 @@ pub mod android;
 
 #[cfg(feature = "cpal")]
 pub use audio_capture::{CaptureError, CaptureFormat, InputPreset};
-pub use event::{MobileEvent, PermissionRequest, PermissionsOutcome};
+pub use event::{MobileEvent, PermissionRequest, PermissionsOutcome, TrimLevel};
 pub use insets::{Insets, SafeArea};
 pub use intent::IntentData;
 pub use secure_store::{PutOptions, SecureStoreError, SecurityLevel};

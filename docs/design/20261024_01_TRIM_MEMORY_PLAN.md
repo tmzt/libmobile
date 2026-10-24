@@ -1,7 +1,7 @@
 ---
 title: Android's memory-trim levels
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`MobileEvent::TrimMemory(TrimLevel)`, from
     `ComponentCallbacks2.onTrimMemory`"
@@ -69,3 +69,7 @@ The owner approved this plan on 2026-10-24 ("approve them, the new hook
 in stages"). Stage 1 (`on_low_memory`) is built first, in libmorph
 only; stage 2 (trim levels) follows libmobile's trim-memory release. The
 status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-24 13:11 EDT: implementation has started; the document is now immutable
+
+Step 1 starts with this commit.

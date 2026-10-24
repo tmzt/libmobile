@@ -258,6 +258,25 @@ let files = dirs::files_dir();   // Some("/data/user/0/<package>/files")
 let cache = dirs::cache_dir();   // Some("/data/user/0/<package>/cache")
 ```
 
+### Memory trim levels
+
+`MobileEvent::TrimMemory(TrimLevel)` reports each
+`ComponentCallbacks2.onTrimMemory` call, through the main loop like the
+other bridges. Levels are ordered by pressure (`RunningModerate` up to
+`Complete`); from API 34 Android sends only `UiHidden` and `Background`.
+A level Android adds later maps to the nearest lower known one.
+`MobileEvent::LowMemory` is unchanged. With `system-events`,
+`SystemEvent::TrimMemory` also reaches subscribers on other threads.
+
+```rust
+use libmobile::{MobileEvent, TrimLevel};
+
+match event {
+    MobileEvent::TrimMemory(level) if level >= TrimLevel::Background => { /* drop caches */ }
+    _ => {}
+}
+```
+
 ### Build info
 
 `android::build_info()` gives the device's manufacturer, brand and model

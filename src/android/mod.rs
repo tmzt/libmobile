@@ -8,7 +8,7 @@
 //!    returns, because `AndroidApp::native_window()` takes the same internal
 //!    lock the poll callback holds);
 //! 2. drains the Kotlin bridges' mailboxes — insets, intents, IME text, and
-//!    permission answers, service events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
+//!    permission answers, memory-trim levels, service events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
 //!    lands in the same tick as a rotation is resolved against the new insets;
 //! 3. pumps input events to [`MobileApp::input`];
 //! 4. calls [`MobileApp::tick`], where the app drains its own
@@ -41,6 +41,7 @@ pub mod surface;
 #[cfg(feature = "system-events")]
 pub(crate) mod system_events;
 pub mod text_input;
+mod trim_memory;
 
 // Re-exported whole so an app reaches input types, `ndk::native_window`, etc.
 // (and, under `cpal`, cpal's AAudio backend) through the exact versions
@@ -174,6 +175,9 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for text in text_input::take_pending() {
         handler.event(app, MobileEvent::TextChanged(text));
     }
+    for level in trim_memory::take_pending() {
+        handler.event(app, MobileEvent::TrimMemory(level));
+    }
     #[cfg(feature = "google-auth")]
     for outcome in auth::take_results() {
         handler.event(app, MobileEvent::GoogleLogin(outcome));
@@ -211,6 +215,7 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 fn discard_stale_commands() {
     let _ = intent::take_pending();
     let _ = text_input::take_pending();
+    let _ = trim_memory::take_pending();
     #[cfg(feature = "google-auth")]
     let _ = auth::take_results();
     #[cfg(feature = "camera")]

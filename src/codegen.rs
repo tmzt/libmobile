@@ -134,6 +134,12 @@ pub const PLUGINS: &[Plugin] = &[
     },
     Plugin {
         feature: None,
+        dir: "bridge",
+        class: "bridge.TrimMemoryPlugin",
+        contributes: Contributes::NOTHING,
+    },
+    Plugin {
+        feature: None,
         dir: "store",
         class: "store.SecureStorePlugin",
         contributes: Contributes::NOTHING,
@@ -1155,6 +1161,14 @@ mod tests {
     fn build_info_plugin_is_core_and_needs_nothing() {
         let active = active_plugins(&[]);
         assert!(active.iter().any(|p| p.class == "bridge.BuildInfoPlugin"));
+        let merged = merge(&active);
+        assert!(merged.permissions.is_empty() && merged.manifest.is_empty());
+    }
+
+    #[test]
+    fn trim_memory_plugin_is_core_and_needs_nothing() {
+        let active = active_plugins(&[]);
+        assert!(active.iter().any(|p| p.class == "bridge.TrimMemoryPlugin"));
         let merged = merge(&active);
         assert!(merged.permissions.is_empty() && merged.manifest.is_empty());
     }
