@@ -383,6 +383,8 @@ copying is the surface lifecycle:
 A tap, or `--es cmd open-link`, opens `https://example.com/a?k=secret`
 in the browser; `--es cmd open-link-later` tries again from a thread after
 5 s, so a call while the app is hidden can be tried after Home.
+At start it logs the files and cache directories (`android::dirs`) and
+whether the files directory is `internal_data_path()`.
 
 ## Development
 
