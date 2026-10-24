@@ -18,6 +18,11 @@
 //! `AndroidApp::internal_data_path()`, and the device's manufacturer, brand
 //! and model (`android::build_info`). It logs each `MobileEvent::TrimMemory`
 //! (try `adb shell am send-trim-memory <package> UI_HIDDEN`).
+//!
+//! It logs `android::night_mode` at start and on each `ConfigChanged` (try
+//! `adb shell cmd uimode night yes`). `--es cmd bar-icons-dark` and
+//! `bar-icons-light` set the system bars' icons
+//! (`android::set_system_bar_icons`) from another thread.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -35,7 +40,9 @@ mod app {
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::dirs;
     use libmobile::android::link::open_link;
-    use libmobile::android::{AndroidApp, InputStatus, MobileApp, build_info, run};
+    use libmobile::android::{
+        AndroidApp, InputStatus, MobileApp, build_info, night_mode, run, set_system_bar_icons,
+    };
     use std::time::{Duration, Instant};
 
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
@@ -94,6 +101,12 @@ mod app {
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
+                MobileEvent::ConfigChanged => {
+                    log::info!(
+                        "wgpu example: ConfigChanged: night_mode {:?}",
+                        night_mode(app)
+                    )
+                }
                 // A `libmobile-wgpu://` link (see build.rs). Logged redacted:
                 // its query or fragment may be a secret.
                 MobileEvent::Intent(intent) => {
@@ -110,6 +123,13 @@ mod app {
                             std::thread::spawn(|| {
                                 std::thread::sleep(Duration::from_secs(5));
                                 open();
+                            });
+                        }
+                        Some(cmd @ ("bar-icons-dark" | "bar-icons-light")) => {
+                            let dark = cmd == "bar-icons-dark";
+                            std::thread::spawn(move || {
+                                set_system_bar_icons(dark, dark);
+                                log::info!("wgpu example: set_system_bar_icons({dark}, {dark})");
                             });
                         }
                         Some(other) => log::warn!("wgpu example: unknown cmd {other:?}"),
@@ -200,6 +220,7 @@ mod app {
         );
         log_dirs(&app);
         log::info!("wgpu example: build_info {:?}", build_info());
+        log::info!("wgpu example: night_mode {:?}", night_mode(&app));
         run(
             app,
             WgpuApp {
