@@ -930,3 +930,40 @@ Not checked:
   again (`dumpsys deviceidle whitelist -dev.highbay.libmobile.example.background`:
   `Removed`). Night mode, the navigation mode and `POST_NOTIFICATIONS`
   (granted) were not changed. Both examples were force-stopped (no pid).
+
+## 2026-10-24 16:21 EDT — Night mode step 1 built; the S23 not checked
+
+Plan: `docs/design/20261024_05_NIGHT_MODE_PLAN.md` (now In
+implementation), step 1 with the system bars amendment (`20f5083` library
+and README, `45097f7` the `wgpu` example).
+
+Small departures (step 1):
+- Both calls are in a private `android::appearance` module, re-exported as
+  `android::night_mode` and `android::set_system_bar_icons`.
+- The contrast scrims are turned off and the bars' colours made transparent
+  from the first `set_system_bar_icons` call on, not for every app at
+  start, so an app that never calls it keeps the bars as before. The
+  amendment can be read either way; the owner may prefer always.
+- `WindowInsetsPlugin` keeps the latest icons and applies them again in
+  `onWindowAttached` and `onResume` (each new window, and before
+  `WindowCreated` reaches Rust), and on the UI thread of the current
+  activity at each call. Before an activity exists the choice is only kept.
+
+Step 1, passed:
+- The same checks as the notifications entry above (fmt; host clippy with
+  no features and `--all-features`; Android clippy with no features,
+  `--features notifications`, `--features
+  foreground-service,notifications,system-events`, `--all-features` and
+  `-p libmobile`; `cargo test --workspace` and `-p libmobile
+  --all-features`): no warnings, all pass.
+- `examples/build.sh wgpu` builds (the Kotlin compiles); installed on the
+  S23 (`adb install -r`: Success).
+
+Not checked on the S23: `cmd uimode night yes`/`no` logging
+`Some(true)`/`Some(false)` on `ConfigChanged`, and the bar icons
+(`dumpsys window` appearance flags and screenshots, 3-button and gesture
+navigation, the scrim). From 16:00 to 16:20 Termux or handlr was in front
+with recent touches, and switching night mode or the navigation mode
+changes what the owner sees. Night mode (`yes`) and the navigation mode
+(`0`, 3-button) were read and left unchanged. The example was
+force-stopped.
