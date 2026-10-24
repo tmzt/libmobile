@@ -345,6 +345,28 @@ match event {
 }
 ```
 
+### Night mode and the system bars
+
+`android::night_mode(&app)` reads the system's night (dark) mode from the
+configuration: `Some(true)`, `Some(false)`, or `None` when undefined. A
+change arrives as `MobileEvent::ConfigChanged`, without recreating the
+activity; read it again then.
+
+The app draws behind the status and navigation bars (libmobile makes every
+app edge-to-edge), so it paints their background itself, in its own frame.
+`android::set_system_bar_icons(status_dark, navigation_dark)` picks dark or
+light icons to go on top, from any thread. From its first call the
+system's contrast scrims are off and the bars' own colours transparent, so
+only what the app draws shows behind them; the choice is applied again to
+each new window.
+
+```rust
+use libmobile::android::{night_mode, set_system_bar_icons};
+
+let dark = night_mode(app).unwrap_or(false);
+set_system_bar_icons(!dark, !dark); // dark icons over a light theme
+```
+
 ### Build info
 
 `android::build_info()` gives the device's manufacturer, brand and model

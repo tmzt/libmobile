@@ -1,7 +1,7 @@
 ---
 title: The system's night mode
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`android::night_mode(&AndroidApp) -> Option<bool>`, from the
     configuration's `uiMode` night bits"
@@ -92,3 +92,7 @@ recommended answer to libmorph's question 1 (a hook, not a system event).
 They are built and released with the notification plans, as libmobile
 0.2.6 and libmorph 0.4.3. The status stays `Draft` until the first
 commit that implements it.
+
+## Amendment — 2026-10-24 15:53 EDT: implementation has started; the document is now immutable
+
+Step 1 (the call, and the system bars' icons) is the first implementing commit.
