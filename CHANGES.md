@@ -382,3 +382,13 @@ libdevice for the Mac, and libmorph wraps both as
 `MorphContext::open_link`.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-23 22:02 EDT — Plans approved
+
+The owner approved, on 2026-10-23 ("approve plans"), with the
+recommended answers:
+- `docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md`: a feature `battery`
+  of its own, shipped with the foreground service in 0.2.3; the
+  foreground service plan's section 5 moves to it (amendment there).
+- `docs/design/20261023_03_OPEN_LINK_PLAN.md`: core `open_link`, http and
+  https only.
