@@ -809,3 +809,13 @@ Step 2 on the S23 (`timothys-s23-ultra:5555`, API 36):
 On the owner's word: libmobile 0.2.5 (`411ba59`, tag `v0.2.5`) with the
 `icons` feature. The icon plan stays In implementation until the owner
 checks the launcher on the S23.
+
+## 2026-10-24 15:34 EDT — The system's dark mode (proposed)
+
+Plan: `docs/design/20261024_05_NIGHT_MODE_PLAN.md` (Draft). Requested by the handlr session with the
+owner's "yes", for its Appearance setting's System option: libmobile reads
+Android's night mode, and libmorph offers `dark_mode()` and
+`on_dark_mode` on every host, with winit's theme on the desktop and the
+web.
+
+Proposed only; nothing is implemented until the owner approves.
