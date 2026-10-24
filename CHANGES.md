@@ -392,3 +392,48 @@ recommended answers:
   foreground service plan's section 5 moves to it (amendment there).
 - `docs/design/20261023_03_OPEN_LINK_PLAN.md`: core `open_link`, http and
   https only.
+
+## 2026-10-23 22:43 EDT — Battery exemption departures in steps 1 and 3
+
+Plan: `docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md`.
+- Step 1 (`e76d8f7`). `BatteryPlugin` adds
+  `<queries><package android:name="com.samsung.android.lool" /></queries>`
+  to the manifest. Without it Android 11+ hides Device Care from
+  `resolveActivity`, so `open_vendor_battery` could never find Samsung's
+  page. A candidate is started only if it resolves and is exported.
+- Step 1. The pages and the dialog count the app as visible only at
+  `IMPORTANCE_FOREGROUND` or `IMPORTANCE_VISIBLE`. The code moved from
+  the foreground service (`importance > IMPORTANCE_VISIBLE`) let a
+  hidden app with a running service (`IMPORTANCE_FOREGROUND_SERVICE`,
+  125) through, and Android then drops the start without an error.
+- Step 1. `BatteryState` has no public constructor; it is only returned.
+- Step 3 (`6ea2f63`). The exemption is read again on `Focused(true)` as
+  well as `Visible(true)`. The Allow/Deny dialog only pauses the
+  activity, so on the S23 no `Visible(true)` came after Allow and
+  `BatteryExemption(true)` was not sent, which step 3 expects. The event
+  is still sent only when the value changed.
+
+## 2026-10-23 22:43 EDT — Open link departures in step 1
+
+Plan: `docs/design/20261023_03_OPEN_LINK_PLAN.md`.
+- Step 1 (`3cdec74`). `check_link` takes and refuses exactly what
+  libdevice's does (`src/link.rs`, 13d4787), at the coordinator's request,
+  so that libmorph can test that the two agree. The host is the text after
+  `://` up to the first `/`, `?` or `#`, after any `user@`, up to
+  `:port`, or inside `[...]` for IPv6. Its test cases are copied too.
+  `OpenLinkError` has `Display` and `std::error::Error`, as libdevice's
+  does.
+- Step 1. A call from another thread starts the link from the
+  Application context with `FLAG_ACTIVITY_NEW_TASK`, not from the
+  activity on its UI thread. Only a call made on the UI thread uses the
+  activity. On the S23, waiting for the UI thread from `android_main` at
+  launch (a `cmd open-link` intent) timed out after 2 s: the UI thread was
+  itself waiting for `android_main` while the activity started. Posting
+  without waiting could not report `NoHandler`. The API and the errors
+  are as planned. The browser opens in its own task, as Chrome's and
+  Samsung Internet's starts did anyway (`flg=0x10000000`).
+- Step 1. Visibility is checked by importance, as for the battery pages
+  (`IMPORTANCE_FOREGROUND` or `IMPORTANCE_VISIBLE`), because Android 10+
+  drops a background start without an error. The plugin's `no-handler`
+  and `platform` messages leave out the exception's text, which can hold
+  the URL.
