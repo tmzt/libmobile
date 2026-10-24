@@ -112,7 +112,7 @@ mod subscribers {
         DeviceIdle(bool),
         /// The battery-optimization exemption (feature `battery`): whether
         /// the app is ignoring battery optimizations. Read again each time
-        /// the app becomes visible, and sent when it changed; the first
+        /// the app becomes visible or focused, and sent when it changed; the first
         /// `subscribe()` reports the value at that moment.
         #[cfg(feature = "battery")]
         BatteryExemption(bool),

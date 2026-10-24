@@ -218,7 +218,7 @@ let page = battery::open_vendor_battery()?;
 `open_app_details()` the app's own settings page. Android does not report
 the answer: with `system-events`, `SystemEvent::BatteryExemption(bool)`
 arrives when the exemption has changed, checked each time the app becomes
-visible.
+visible or focused.
 
 ### System events
 

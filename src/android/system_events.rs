@@ -70,9 +70,10 @@ pub extern "system" fn Java_dev_highbay_libmobile_events_SystemEventsPlugin_nati
         log::info!("libmobile: system {event:?}");
         publish(event);
         // Android does not report the dialog's answer or a change in
-        // settings; the user comes back to the app after either.
+        // settings; the user comes back to the app after either. The dialog
+        // only pauses the activity, so focus counts as coming back too.
         #[cfg(feature = "battery")]
-        if kind == 0 && value {
+        if (kind == 0 || kind == 1) && value {
             super::battery::recheck();
         }
         Ok(())

@@ -15,8 +15,8 @@
 //!
 //! Android does not report the answer to the dialog, or a change made in
 //! settings. Under `system-events`, libmobile reads the exemption again each
-//! time the app becomes visible and sends `SystemEvent::BatteryExemption`
-//! when it changed.
+//! time the app becomes visible or focused (the dialog only takes the
+//! focus) and sends `SystemEvent::BatteryExemption` when it changed.
 //!
 //! **Google Play** allows [`request_ignore_optimizations`] only for some
 //! kinds of app (see its policy on `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`).
@@ -158,7 +158,7 @@ fn call<R>(
 
 /// Read the exemption again and publish `SystemEvent::BatteryExemption` if
 /// it changed, or if it is the first read. Called when the app becomes
-/// visible and at the first `subscribe()`.
+/// visible or focused, and at the first `subscribe()`.
 #[cfg(feature = "system-events")]
 pub(crate) fn recheck() {
     use crate::battery::ExemptionTracker;
