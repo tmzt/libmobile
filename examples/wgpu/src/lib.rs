@@ -12,6 +12,10 @@
 //! A tap, or `--es cmd open-link`, opens [`LINK`] in the browser
 //! (`android::link::open_link`); `--es cmd open-link-later` tries again from
 //! a thread after 5 s, so that a call while the app is hidden can be tried.
+//!
+//! At start it logs the app's files and cache directories
+//! (`android::dirs`), and whether the files directory is
+//! `AndroidApp::internal_data_path()`.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -27,6 +31,7 @@ mod app {
     use crate::uniforms::Uniforms;
     use libmobile::MobileEvent;
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
+    use libmobile::android::dirs;
     use libmobile::android::link::open_link;
     use libmobile::android::{AndroidApp, InputStatus, MobileApp, run};
     use std::time::{Duration, Instant};
@@ -34,6 +39,27 @@ mod app {
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
     const TAP_TIME: Duration = Duration::from_millis(300);
     const TAP_SLOP: f32 = 24.0;
+
+    /// Log `android::dirs` against `internal_data_path`, here and from
+    /// another thread.
+    fn log_dirs(app: &AndroidApp) {
+        let files = dirs::files_dir();
+        let internal = app.internal_data_path();
+        log::info!("wgpu example: files_dir {files:?}");
+        log::info!("wgpu example: cache_dir {:?}", dirs::cache_dir());
+        log::info!("wgpu example: internal_data_path {internal:?}");
+        log::info!(
+            "wgpu example: files_dir == internal_data_path: {}",
+            files.is_some() && files == internal
+        );
+        std::thread::spawn(|| {
+            log::info!(
+                "wgpu example: from a thread: files_dir {:?}, cache_dir {:?}",
+                dirs::files_dir(),
+                dirs::cache_dir()
+            );
+        });
+    }
 
     fn open() {
         log::info!("wgpu example: open link: {:?}", open_link(crate::LINK));
@@ -169,6 +195,7 @@ mod app {
                 )
                 .with_tag("libmobile-wgpu"),
         );
+        log_dirs(&app);
         run(
             app,
             WgpuApp {
