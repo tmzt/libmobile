@@ -555,3 +555,10 @@ directories, libdevice the desktop paths by app id, and libmorph creates
 them before `init` as `MorphContext::storage_dir()` and `cache_dir()`.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-23 23:32 EDT — App storage approved
+
+The owner approved the app storage plans in libmobile, libdevice and
+libmorph ("approved plan and start"): `data_dir()` on every host with a
+filesystem, `Option` kept for the web, a new `MorphApp::APP_ID`, and a
+new `cache_dir()`. libmobile and libdevice are built first.
