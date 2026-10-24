@@ -803,3 +803,9 @@ Step 2 on the S23 (`timothys-s23-ultra:5555`, API 36):
   started. The launcher icon under One UI's mask, themed icons and the app
   info page need the owner.
 - The example was force-stopped afterwards (no pid).
+
+## 2026-10-24 14:30 EDT — Released libmobile 0.2.5
+
+On the owner's word: libmobile 0.2.5 (`411ba59`, tag `v0.2.5`) with the
+`icons` feature. The icon plan stays In implementation until the owner
+checks the launcher on the S23.
