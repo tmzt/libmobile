@@ -420,7 +420,8 @@ in the browser; `--es cmd open-link-later` tries again from a thread after
 5 s, so a call while the app is hidden can be tried after Home.
 At start it logs the files and cache directories (`android::dirs`) and
 whether the files directory is `internal_data_path()`, and the build info
-(`android::build_info`).
+(`android::build_info`). It logs each `MobileEvent::TrimMemory`
+(`adb shell am send-trim-memory dev.highbay.libmobile.example.wgpu UI_HIDDEN`).
 
 ## Development
 
