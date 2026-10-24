@@ -740,3 +740,13 @@ Plan: `docs/design/20261024_03_APP_ICON_PLAN.md` (Draft, approved). The
 owner approved the icon plans in libmobile and libmorph, with the
 recommended answers. PNG describes the bitmap sources; the generated
 files are whatever each platform takes.
+
+## 2026-10-24 14:13 EDT — Alert notifications and taps (proposed)
+
+Plan: `docs/design/20261024_04_NOTIFICATIONS_PLAN.md` (Draft). Requested by
+the handlr session with the owner's "yes", and the owner's "updating the
+ongoing notification should be supported": alert notifications on the
+app's own channels, a tag naming what was tapped, and updating the ongoing
+notification from any thread while suspended, as a checked guarantee.
+
+Proposed only; nothing is implemented until the owner approves.
