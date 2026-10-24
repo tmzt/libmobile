@@ -437,3 +437,111 @@ Plan: `docs/design/20261023_03_OPEN_LINK_PLAN.md`.
   drops a background start without an error. The plugin's `no-handler`
   and `platform` messages leave out the exception's text, which can hold
   the URL.
+
+## 2026-10-23 22:43 EDT — Battery exemption on the S23 (step 3)
+
+Plan: `docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md`, steps 2 and 3.
+The `background` example (`a33edb5`, with `6ea2f63`) on the owner's
+Galaxy S23 Ultra (One UI on Android 16), over adb on the tailnet; the
+phone unlocked, on cellular with Wi-Fi off, the listener `nc -dlk 7999`
+on the Mac's tailnet address. As found: not on the Doze allowlist,
+`POST_NOTIFICATIONS` granted, not in Doze.
+
+Passed:
+- Step 2: it builds (the merged manifest has
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` and the Device Care
+  `<queries>`), runs, and on the first resume logs
+  `battery Ok(BatteryState { ignoring_optimizations: false,
+  background_restricted: false, manufacturer: "samsung" })`, then
+  `battery request: Ok(())`. The dialog opened:
+  `topResumedActivity=… com.android.settings/.fuelgauge.RequestIgnoreBatteryOptimizations`,
+  "Stop optimizing battery usage?" with Deny and Allow (`uiautomator dump`).
+- The first `subscribe()` reported `BatteryExemption(false)`, and
+  `current()` had `battery_exemption: Some(false)`.
+- Deny (`input tap`): no event, not on the allowlist.
+- Allow, from `--es cmd battery`: `dumpsys deviceidle whitelist` lists
+  `user,dev.highbay.libmobile.example.background,10813`, and on return
+  `libmobile: system BatteryExemption(true)`. With `e76d8f7` alone it
+  did not come: back from the dialog there was only `Focused(true)`, no
+  `Visible(true)` (fixed in `6ea2f63`, see the departures entry).
+- `--es cmd battery` while exempt: `Ok(())` and no dialog (the example
+  stayed the top activity).
+- `whitelist -<package>`, Home and back: `Visible(true)`, then
+  `BatteryExemption(false)`.
+- `battery-settings`: `Ok(OptimizationList)`; Samsung maps the intent to
+  `com.android.settings/.Settings$AppBatteryUsageActivity`.
+  `app-details`: `Ok(AppDetails)`,
+  `com.android.settings/.applications.InstalledAppDetails`.
+  `vendor-battery`: `Ok(Vendor)`, the first candidate,
+  `com.samsung.android.lool/com.samsung.android.sm.battery.ui.BatteryActivity`
+  (in Device Care's own task). The list needs no correction on this phone.
+- Doze, forced with the screen on (`dumpsys deviceidle force-idle`,
+  `mState=IDLE`, the example hidden with its service, `curProcState=4`):
+  - not exempt, 22:33:22 to 22:36:04: lines 5 to 9 arrived at 22:33:58,
+    22:34:28, 22:34:59, 22:35:29 and 22:35:59, 30 s apart, as before Doze;
+  - exempt (`whitelist +<package>`), 22:36:06 to 22:38:30: lines 10 to 13
+    at 22:36:29, 22:37:00, 22:37:30 and 22:38:00.
+  So with a foreground service, forced Doze stopped nothing either way;
+  this check does not show what the exemption changes.
+
+Not checked:
+- Doze with the screen off and the CPU asleep, with and without the
+  exemption: turning the screen off locks the phone, and the open link
+  checks still needed it unlocked. Needs the owner to leave the phone
+  alone with the screen off, once on each setting.
+- `NotVisible` from a page call while hidden: the example has no command
+  that opens a page from a thread later.
+- Samsung's app sleeping lists ("Never sleeping apps" and the rest) were
+  not opened or changed; the vendor page is Device Care's battery page,
+  one tap from them.
+
+Left as found: not on the Doze allowlist, not in Doze, Wi-Fi off,
+`POST_NOTIFICATIONS` as it was, the example force-stopped.
+
+## 2026-10-23 22:43 EDT — Open link on the S23 (step 2)
+
+Plan: `docs/design/20261023_03_OPEN_LINK_PLAN.md`, step 2. The `wgpu`
+example (`2781f63`, with `3cdec74`) on the same S23 Ultra, unlocked.
+Chrome was the browser role holder; six other apps also take https links
+(Samsung Internet, Firefox and others, `cmd package query-activities`).
+
+Passed:
+- `--es cmd open-link` at launch, a tap, and `open-link` while in front
+  all opened Chrome:
+  `START u0 {act=android.intent.action.VIEW dat=https://example.com/... flg=0x10000000 … cmp=com.android.chrome/…}`,
+  `topResumedActivity=… com.android.chrome/org.chromium.chrome.browser.ChromeTabbedActivity`,
+  `open link: Ok(())`.
+- logcat shows `D/libmobile-wgpu: libmobile: open link https://example.com/a<redacted>`;
+  no line from the example or libmobile has `secret`.
+- `open-link-later`, then Home: `open link: Err(NotVisible)`, and nothing
+  started.
+- Chrome disabled (`pm disable-user --user 0 com.android.chrome`): the
+  link opened in the next handler, Samsung Internet
+  (`cmp=com.sec.android.app.sbrowser/.SBrowserLauncherActivity`).
+  `NoHandler` was not seen: other apps take the link.
+
+Failed, then fixed:
+- With `3cdec74`'s first version (waiting for the UI thread),
+  `cmd open-link` at launch gave
+  `Err(Platform("platform: the UI thread did not answer"))` and opened
+  nothing. Fixed before the commit; see the departures entry.
+
+Found:
+- `cmd open-link` sent to the example while it was hidden gave
+  `Err(NotVisible)`: the intent is delivered before the activity is
+  visible again. A link opened in answer to an intent that brings the app
+  back may need to wait for `Resume`.
+- Samsung Internet logs the whole URL itself
+  (`W/NativePageHandler: current tab is null. url = https://example.com/a?k=secret`).
+  That is the browser's log, not libmobile's.
+- Disabling Chrome took the browser role from it
+  (`RoleControllerServiceImpl: Removing package that no longer qualifies`)
+  and gave it to Samsung Internet, which then showed its first-run
+  `HelpIntroActivity`.
+
+Restored: Chrome enabled, the browser role given back to Chrome
+(`cmd role add-role-holder --user 0 android.app.role.BROWSER com.android.chrome`,
+checked: `get-role-holders` gives `com.android.chrome`, and the next
+link opened in Chrome), Samsung Internet force-stopped, the example
+force-stopped. The owner may want to check that Samsung Internet's
+first-run screens and Chrome's default-browser setting look as before.
