@@ -8,6 +8,14 @@
 //!   (`SurfaceTarget`, so wgpu's *safe* `create_surface` works);
 //! * `WindowDestroyed` drops it — synchronously, because libmobile delivers
 //!   that event inside the poll callback, before Android takes the window back.
+//!
+//! A tap, or `--es cmd open-link`, opens [`LINK`] in the browser
+//! (`android::link::open_link`); `--es cmd open-link-later` tries again from
+//! a thread after 5 s, so that a call while the app is hidden can be tried.
+
+/// The link a tap opens. Its query stands for a secret: libmobile's log cuts
+/// it off.
+pub const LINK: &str = "https://example.com/a?k=secret";
 
 #[cfg(target_os = "android")]
 mod gpu;
@@ -19,8 +27,17 @@ mod app {
     use crate::uniforms::Uniforms;
     use libmobile::MobileEvent;
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
+    use libmobile::android::link::open_link;
     use libmobile::android::{AndroidApp, InputStatus, MobileApp, run};
     use std::time::{Duration, Instant};
+
+    /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
+    const TAP_TIME: Duration = Duration::from_millis(300);
+    const TAP_SLOP: f32 = 24.0;
+
+    fn open() {
+        log::info!("wgpu example: open link: {:?}", open_link(crate::LINK));
+    }
 
     struct WgpuApp {
         gpu: Option<Gpu>,
@@ -30,6 +47,8 @@ mod app {
         last_tick: Instant,
         /// A finger is on the screen.
         down: bool,
+        /// Where and when the press started, while it can still be a tap.
+        press: Option<(Instant, [f32; 2])>,
     }
 
     impl MobileApp for WgpuApp {
@@ -56,6 +75,17 @@ mod app {
                             intent.is_new
                         );
                     }
+                    match intent.extra("cmd") {
+                        Some("open-link") => open(),
+                        Some("open-link-later") => {
+                            std::thread::spawn(|| {
+                                std::thread::sleep(Duration::from_secs(5));
+                                open();
+                            });
+                        }
+                        Some(other) => log::warn!("wgpu example: unknown cmd {other:?}"),
+                        None => {}
+                    }
                 }
                 _ => {}
             }
@@ -66,12 +96,37 @@ mod app {
                 return InputStatus::Unhandled;
             };
             let pointer = motion.pointer_at_index(motion.pointer_index());
+            let at = [pointer.x(), pointer.y()];
             match motion.action() {
-                MotionAction::Down | MotionAction::Move | MotionAction::PointerDown => {
-                    self.uniforms.touch = [pointer.x(), pointer.y()];
+                MotionAction::Down => {
+                    self.press = Some((Instant::now(), at));
+                    self.uniforms.touch = at;
                     self.down = true;
                 }
-                MotionAction::Up | MotionAction::Cancel => self.down = false,
+                MotionAction::Move | MotionAction::PointerDown => {
+                    let moved = self.press.is_some_and(|(_, from)| {
+                        (at[0] - from[0]).hypot(at[1] - from[1]) > TAP_SLOP
+                    });
+                    if moved || motion.action() == MotionAction::PointerDown {
+                        self.press = None;
+                    }
+                    self.uniforms.touch = at;
+                    self.down = true;
+                }
+                MotionAction::Up => {
+                    if self
+                        .press
+                        .take()
+                        .is_some_and(|(when, _)| when.elapsed() < TAP_TIME)
+                    {
+                        open();
+                    }
+                    self.down = false;
+                }
+                MotionAction::Cancel => {
+                    self.press = None;
+                    self.down = false;
+                }
                 _ => {}
             }
             InputStatus::Handled
@@ -105,7 +160,13 @@ mod app {
     fn android_main(app: AndroidApp) {
         android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Info)
+                .with_max_level(log::LevelFilter::Debug)
+                // libmobile's `open link` line is at debug level.
+                .with_filter(
+                    android_logger::FilterBuilder::new()
+                        .parse("info,libmobile::android::link=debug")
+                        .build(),
+                )
                 .with_tag("libmobile-wgpu"),
         );
         run(
@@ -117,6 +178,7 @@ mod app {
                 start: Instant::now(),
                 last_tick: Instant::now(),
                 down: false,
+                press: None,
             },
         );
     }
