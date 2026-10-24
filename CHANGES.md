@@ -834,3 +834,9 @@ dismissal (libmobile), paste on the desktop (libdevice), and one text
 input API and hook in libmorph on every host.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-24 16:18 EDT — Text input approved
+
+Plan: `docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md` (Draft, approved). The owner approved the text
+input plans ("yes"), with the recommended answers. Released after the
+notification and dark mode work.
