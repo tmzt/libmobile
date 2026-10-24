@@ -562,3 +562,27 @@ The owner approved the app storage plans in libmobile, libdevice and
 libmorph ("approved plan and start"): `data_dir()` on every host with a
 filesystem, `Option` kept for the web, a new `MorphApp::APP_ID`, and a
 new `cache_dir()`. libmobile and libdevice are built first.
+
+## 2026-10-23 23:36 EDT — App directories step 1 on the S23
+
+Plan: `docs/design/20261023_04_APP_DIRECTORIES_PLAN.md`, step 1
+(`ac0f60e` library, `ffad55b` example, `82a1d9c` README). Built with
+`examples/build.sh wgpu`, installed on the owner's S23
+(`timothys-s23-ultra:5555`) and started. The example calls
+`dirs::files_dir()` and `cache_dir()` on `android_main` before `run`, and
+again from a spawned thread.
+
+Passed:
+- `I libmobile-wgpu: … wgpu example: files_dir Some("/data/user/0/dev.highbay.libmobile.example.wgpu/files")`
+- `I libmobile-wgpu: … wgpu example: cache_dir Some("/data/user/0/dev.highbay.libmobile.example.wgpu/cache")`
+- `I libmobile-wgpu: … wgpu example: internal_data_path Some("/data/user/0/dev.highbay.libmobile.example.wgpu/files")`
+- `I libmobile-wgpu: … wgpu example: files_dir == internal_data_path: true`
+- From another thread (tid 23265, `android_main` is 23264), the same two
+  paths: `wgpu example: from a thread: files_dir Some("…/files"), cache_dir Some("…/cache")`.
+- No libmobile warning, no crash; the example went on to
+  `wgpu: up 1080x2316 Rgba8Unorm` (Vulkan, Adreno 740).
+
+`DirsPlugin` is a `MobileActivityPlugin` with no hooks, listed in
+`codegen::PLUGINS` as a core plugin like `LinkPlugin`, so it is in every
+build. The example was force-stopped afterwards. Step 2 (release) waits
+for the owner.
