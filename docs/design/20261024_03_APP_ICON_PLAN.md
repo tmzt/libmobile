@@ -186,3 +186,15 @@ The status stays `Draft` until the first commit that implements it.
 
 Step 1 (the `icons` feature, `gradle::Icon`, `Project::icon`, the generated
 resources) is implemented on `main` from this commit, on the owner's word.
+
+## Amendment — 2026-10-24 14:30 EDT: released in 0.2.5; step 2 still open
+
+Step 1 is `1ed44b3` and `2acdfc6` (the `wgpu` example), with the
+departure in `03feb9d` (`icon_images` in a private `src/icon.rs`, since
+`build.rs` compiles `codegen.rs` without `image`); `aapt dump badging`
+lists the adaptive icon at every density. Step 3 is libmobile 0.2.5
+(`411ba59`, tag `v0.2.5`), released on the owner's word ("add this to 0.4.2
+if that's the next build, don't hold up the current work") before step 2
+is complete: the S23 resolves the launcher icon to `mipmap/ic_launcher`,
+but the launcher, themed icons and app info need the owner. The status
+stays `In implementation` until they pass.
