@@ -12,6 +12,18 @@
 //! * After starting the service, it logs the battery state and, if the app
 //!   is not exempt from battery optimization, shows the Allow/Deny dialog.
 //! * Another thread logs every `SystemEvent`, `BatteryExemption` among them.
+//! * Every 30 s the network thread replaces the ongoing notification
+//!   (`service::update`) with a new title, text, button set (Ping, or an
+//!   Open button that opens the app) and tag (`update-<n>`), also with the
+//!   screen off. A tap on its body logs `ServiceEvent::Tapped`.
+//! * `--es cmd alert` posts an alert (`android::notify`) on the `alerts`
+//!   channel (high importance) with the tag `alert-tag-<n>` and two buttons,
+//!   Ack (does not open the app) and Open (opens it); `--es id <id>` names
+//!   it (default `example`), and posting the same id replaces it.
+//!   `alert-later` posts it from a thread after `--es delay <seconds>`
+//!   (default 8), so it can be posted while the app is in the background.
+//!   `alert-cancel` and `alert-cancel-all` remove alerts. Taps log
+//!   `MobileEvent::Notify`.
 //!
 //! ```sh
 //! nc -lk 7999      # on a computer on the same network
@@ -24,7 +36,8 @@
 //! `battery-settings`, `app-details` and `vendor-battery` (open those
 //! pages and log which opened), and `start-later` (stop now, then start again after
 //! `--es delay <seconds>`, default 8, so that a start from the background
-//! can be tried).
+//! can be tried), `alert`, `alert-later`, `alert-cancel` and
+//! `alert-cancel-all` (above).
 
 /// What goes over the wire, kept apart from Android so it is tested on the
 /// host.
@@ -32,6 +45,16 @@ pub mod wire {
     /// Line `n`, with the phone's clock in seconds since 1970.
     pub fn line(n: u64, unix_secs: u64) -> String {
         format!("libmobile-background line {n} at {unix_secs}\n")
+    }
+
+    /// The ongoing notification's title after `n` updates.
+    pub fn update_title(n: u64) -> String {
+        format!("libmobile background, update {n}")
+    }
+
+    /// The ongoing notification's tag after `n` updates.
+    pub fn update_tag(n: u64) -> String {
+        format!("update-{n}")
     }
 
     /// The notification's text after `n` lines.
@@ -52,6 +75,12 @@ pub mod wire {
         }
 
         #[test]
+        fn updates_are_numbered() {
+            assert_eq!(update_title(2), "libmobile background, update 2");
+            assert_eq!(update_tag(2), "update-2");
+        }
+
+        #[test]
         fn status_counts_lines() {
             assert_eq!(status(1, "h:1"), "1 line sent to h:1");
             assert_eq!(status(2, "h:1"), "2 lines sent to h:1");
@@ -64,6 +93,7 @@ mod app {
     use crate::wire;
     use libmobile::android::ndk::hardware_buffer_format::HardwareBufferFormat;
     use libmobile::android::ndk::native_window::NativeWindow;
+    use libmobile::android::notify::{self, Channel, Importance};
     use libmobile::android::service::{
         self, Controls, NotificationAction, NotificationContent, ServiceEvent, ServiceOptions,
         ServiceType,
@@ -74,7 +104,7 @@ mod app {
     use std::io::{ErrorKind, Read, Write};
     use std::net::{TcpStream, ToSocketAddrs};
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
     const TAG: &str = "libmobile-background";
@@ -90,6 +120,41 @@ mod app {
     static STOP: AtomicBool = AtomicBool::new(false);
     static NETWORK_RUNNING: AtomicBool = AtomicBool::new(false);
     static EVENTS_RUNNING: AtomicBool = AtomicBool::new(false);
+    /// Alerts posted, for their text and tag.
+    static ALERTS: AtomicU64 = AtomicU64::new(0);
+
+    /// Post (or replace) alert `id` with a tag and two buttons.
+    fn post_alert(id: &str) {
+        let n = ALERTS.fetch_add(1, Ordering::Relaxed) + 1;
+        let channel = Channel::new("alerts", "Alerts", Importance::High);
+        let mut content =
+            NotificationContent::new(format!("libmobile alert {id}"), format!("alert number {n}"));
+        content.tag = Some(format!("alert-tag-{n}"));
+        content.actions.push(NotificationAction::new("ack", "Ack"));
+        let mut open = NotificationAction::new("open", "Open");
+        open.opens_app = true;
+        content.actions.push(open);
+        log::info!(
+            "background: alert {id:?} {n}: {:?}",
+            notify::post(id, &content, &channel)
+        );
+    }
+
+    /// The ongoing notification after `n` updates: title, text, buttons
+    /// and tag all change.
+    fn update_content(n: u64, text: &str) -> NotificationContent {
+        let mut content = NotificationContent::new(wire::update_title(n), text);
+        content.tag = Some(wire::update_tag(n));
+        let action = if n.is_multiple_of(2) {
+            NotificationAction::new("ping", "Ping")
+        } else {
+            let mut open = NotificationAction::new("open", "Open");
+            open.opens_app = true;
+            open
+        };
+        content.actions.push(action);
+        content
+    }
 
     fn start_service() {
         let mut content = NotificationContent::new("libmobile background", "starting");
@@ -164,7 +229,19 @@ mod app {
         let mut stream: Option<(String, TcpStream)> = None;
         let mut next = Instant::now();
         let mut sent = 0u64;
+        let mut updates = 0u64;
+        let mut next_update = Instant::now() + PERIOD;
+        let mut text = String::from("starting");
         while !STOP.load(Ordering::Relaxed) {
+            if Instant::now() >= next_update {
+                next_update = Instant::now() + PERIOD;
+                updates += 1;
+                let result = service::update(&update_content(updates, &text));
+                log::info!(
+                    "background: update {updates} (tag {}): {result:?}",
+                    wire::update_tag(updates)
+                );
+            }
             let host = HOST.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(host) = host
                 && Instant::now() >= next
@@ -196,7 +273,8 @@ mod app {
                                     ) => {}
                                 Err(err) => log::error!("background: read: {err}"),
                             }
-                            if let Err(err) = service::update_text(&wire::status(sent, &host)) {
+                            text = wire::status(sent, &host);
+                            if let Err(err) = service::update_text(&text) {
                                 log::warn!("background: update_text: {err}");
                             }
                         }
@@ -213,8 +291,20 @@ mod app {
         NETWORK_RUNNING.store(false, Ordering::Relaxed);
     }
 
-    fn command(cmd: &str, delay: Option<&str>) {
+    fn command(cmd: &str, delay: Option<&str>, id: Option<&str>) {
+        let id = id.unwrap_or("example").to_string();
         match cmd {
+            "alert" => post_alert(&id),
+            "alert-later" => {
+                let secs = delay.and_then(|d| d.parse().ok()).unwrap_or(8);
+                std::thread::spawn(move || {
+                    log::info!("background: alert {id:?} in {secs} s");
+                    std::thread::sleep(Duration::from_secs(secs));
+                    post_alert(&id);
+                });
+            }
+            "alert-cancel" => log::info!("background: cancel {id:?}: {:?}", notify::cancel(&id)),
+            "alert-cancel-all" => log::info!("background: cancel all: {:?}", notify::cancel_all()),
             "start" => start_service(),
             "stop" => log::info!("background: stop: {:?}", service::stop()),
             "wake-on" => log::info!("background: wake-on: {:?}", service::set_wake_lock(true)),
@@ -320,7 +410,7 @@ mod app {
                         *HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(host.to_string());
                     }
                     if let Some(cmd) = intent.extra("cmd") {
-                        command(cmd, intent.extra("delay"));
+                        command(cmd, intent.extra("delay"), intent.extra("id"));
                     }
                 }
                 MobileEvent::Service(event) => {
@@ -329,6 +419,7 @@ mod app {
                         STOP.store(true, Ordering::Relaxed);
                     }
                 }
+                MobileEvent::Notify(event) => log::info!("background: main loop {event:?}"),
                 MobileEvent::Destroy => log::info!("background: destroy"),
                 _ => {}
             }

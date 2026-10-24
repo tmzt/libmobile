@@ -3,14 +3,14 @@ name = "libmobile-example-background"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "libmobile example: a foreground service keeps a TCP connection alive in the background, with notification controls and system events"
+description = "libmobile example: a foreground service keeps a TCP connection alive in the background, with notification controls, alerts and system events"
 
 [lib]
 name = "libmobile_example_background"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-libmobile = { path = "../..", features = ["foreground-service", "system-events", "battery"] }
+libmobile = { path = "../..", features = ["foreground-service", "system-events", "battery", "notifications"] }
 log = "0.4"
 
 # The host copy, for `libmobile::gradle` in build.rs.
