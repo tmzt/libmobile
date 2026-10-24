@@ -1,7 +1,7 @@
 ---
 title: Exempting the app from battery optimization and app sleeping
 date: 2026-10-23
-status: Draft
+status: In implementation
 covers:
   - "A feature `battery` of its own: `android::battery`, the
     battery-optimization dialog, the settings pages, and its state"
@@ -246,3 +246,9 @@ separate answers to section 7, so its recommendations stand:
    falling back to the app's settings page.
 
 The status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-23 22:30 EDT: implementation has started; the document is now immutable
+
+Implementation has started: step 1 (the feature and the API) starts with
+this commit. The status is now `In implementation`, and this document is
+immutable. Departures are recorded in CHANGES.md.

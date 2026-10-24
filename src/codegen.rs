@@ -149,7 +149,7 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
-    // The service, its notification and the battery calls
+    // The service and its notification
     // (`service/`, `src/android/service.rs`). The `<service>` element and
     // its permissions come from `gradle::Project::foreground_service`, which
     // knows the types ([`foreground_service_manifest`]).
@@ -158,6 +158,20 @@ pub const PLUGINS: &[Plugin] = &[
         dir: "service",
         class: "service.ForegroundServicePlugin",
         contributes: Contributes::NOTHING,
+    },
+    // Battery optimization and app sleeping (`battery/`,
+    // `src/android/battery.rs`). The permission for the direct dialog comes
+    // from `gradle::Project::request_ignore_battery_optimizations`. Samsung's
+    // Device Care is listed in `<queries>`, or Android 11+ hides its pages
+    // from `resolveActivity`.
+    Plugin {
+        feature: Some("battery"),
+        dir: "battery",
+        class: "battery.BatteryPlugin",
+        contributes: Contributes {
+            manifest: &["<queries><package android:name=\"com.samsung.android.lool\" /></queries>"],
+            ..Contributes::NOTHING
+        },
     },
     // Visibility, network and Doze callbacks on the Application
     // (`events/`, `src/android/system_events.rs`).
@@ -859,6 +873,7 @@ mod tests {
                 "google-auth",
                 "camera",
                 "foreground-service",
+                "battery",
                 "system-events",
                 "secure-store-no-strongbox"
             ]
@@ -960,6 +975,19 @@ mod tests {
                 .iter()
                 .any(|p| p.class == "service.ForegroundServicePlugin")
         );
+    }
+
+    #[test]
+    fn battery_plugin_is_feature_gated_and_sees_device_care() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "battery"));
+        let active = active_plugins(&["battery"]);
+        assert!(active.iter().any(|p| p.class == "battery.BatteryPlugin"));
+        let merged = merge(&active);
+        assert_eq!(
+            merged.manifest,
+            ["<queries><package android:name=\"com.samsung.android.lool\" /></queries>"]
+        );
+        assert!(merged.permissions.is_empty());
     }
 
     #[test]

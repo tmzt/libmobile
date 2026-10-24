@@ -242,7 +242,8 @@ impl Project {
     }
 
     /// Declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, so
-    /// `battery::request_ignore_optimizations` may ask the user directly.
+    /// `android::battery::request_ignore_optimizations` (feature `battery`)
+    /// may ask the user directly.
     /// Play allows that only for some kinds of app; see that function.
     pub fn request_ignore_battery_optimizations(mut self) -> Self {
         if !self

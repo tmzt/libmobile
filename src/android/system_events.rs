@@ -37,7 +37,12 @@ pub(crate) fn ensure_registered() {
         }
     });
     match result {
-        Ok(()) => *registered = true,
+        Ok(()) => {
+            *registered = true;
+            // The value at this moment, also when the app is not visible.
+            #[cfg(feature = "battery")]
+            super::battery::recheck();
+        }
         Err(err) => log::error!("libmobile: registering system events failed: {err}"),
     }
 }
@@ -64,6 +69,12 @@ pub extern "system" fn Java_dev_highbay_libmobile_events_SystemEventsPlugin_nati
         };
         log::info!("libmobile: system {event:?}");
         publish(event);
+        // Android does not report the dialog's answer or a change in
+        // settings; the user comes back to the app after either.
+        #[cfg(feature = "battery")]
+        if kind == 0 && value {
+            super::battery::recheck();
+        }
         Ok(())
     });
     outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>()

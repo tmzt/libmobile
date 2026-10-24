@@ -37,6 +37,7 @@ android/java/dev/highbay/libmobile/
   auth/                     feature "google-auth": Credential Manager sign-in
   camera/                   feature "camera": capture through the system camera app
   service/                  feature "foreground-service": the foreground service and its notification
+  battery/                  feature "battery": battery optimization and the battery settings pages
   events/                   feature "system-events": visibility, network and Doze callbacks
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
@@ -56,7 +57,8 @@ examples/
 | `google-auth` | `auth/GoogleAuthPlugin`    | `androidx.credentials` and `googleid` AARs; `MobileEvent::GoogleLogin` |
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
 | `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
-| `foreground-service` | `service/ForegroundServicePlugin` | `android::service`, `android::battery`; `MobileEvent::Service` |
+| `foreground-service` | `service/ForegroundServicePlugin` | `android::service`; `MobileEvent::Service` |
+| `battery`     | `battery/BatteryPlugin`    | `android::battery`; a `<queries>` entry for Samsung's Device Care; with `system-events`, `SystemEvent::BatteryExemption` |
 | `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 
@@ -191,7 +193,32 @@ service::update_text("3 messages")?;
 Button taps, Exit and the service's own changes arrive as
 `MobileEvent::Service(ServiceEvent::…)`. Exit stops the service, delivers
 `Exited` and finishes the activity; the app's threads end themselves.
-`android::battery` checks and asks for the battery-optimization exemption.
+
+### Battery optimization
+
+With the `battery` feature, `android::battery` reads the app's battery
+settings and opens the pages where the user changes them. Call it when the
+app decides to, from any thread, while the app is visible:
+
+```rust
+use libmobile::android::battery;
+
+let state = battery::state()?; // ignoring_optimizations, background_restricted, manufacturer
+if !state.ignoring_optimizations {
+    // The Allow/Deny dialog. Needs `.request_ignore_battery_optimizations()`
+    // in the build script. Not for apps on Google Play: use open_settings().
+    battery::request_ignore_optimizations()?;
+}
+// On Samsung, the battery page where app sleeping is set; elsewhere, or if
+// it is not found, the app's own settings page. Returns which opened.
+let page = battery::open_vendor_battery()?;
+```
+
+`open_settings()` opens the list of every app's setting and
+`open_app_details()` the app's own settings page. Android does not report
+the answer: with `system-events`, `SystemEvent::BatteryExemption(bool)`
+arrives when the exemption has changed, checked each time the app becomes
+visible.
 
 ### System events
 
@@ -212,8 +239,8 @@ std::thread::spawn(move || loop {
 });
 ```
 
-Events are visibility, focus, the foreground service, the default network
-and Doze. Each subscriber gets every event after it subscribes, in order.
+Events are visibility, focus, the foreground service, the default network,
+Doze and, with `battery`, the battery exemption. Each subscriber gets every event after it subscribes, in order.
 `system_events::current()` gives the latest of each kind. With the `tokio`
 feature, `subscribe_tokio()` returns a tokio `UnboundedReceiver` instead.
 

@@ -23,7 +23,7 @@
 pub mod audio_capture;
 #[cfg(feature = "google-auth")]
 pub mod auth;
-#[cfg(feature = "foreground-service")]
+#[cfg(feature = "battery")]
 pub mod battery;
 #[cfg(feature = "camera")]
 pub mod camera;

@@ -2,7 +2,6 @@ package dev.highbay.libmobile.service
 
 import android.Manifest
 import android.app.Activity
-import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -14,11 +13,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
-import android.provider.Settings
 import android.util.Log
 import dev.highbay.libmobile.MobileActivityPlugin
 import dev.highbay.libmobile.NativeLib
@@ -26,7 +23,7 @@ import java.lang.ref.WeakReference
 
 /**
  * The foreground service's state and its calls from Rust
- * (`libmobile::android::service` and `libmobile::android::battery`).
+ * (`libmobile::android::service`).
  *
  * Rust calls the static methods from any thread, with the Application
  * (from `ndk-context`). Those that can fail return `null` on success or a
@@ -235,35 +232,6 @@ object ForegroundServicePlugin : MobileActivityPlugin {
     @JvmStatic
     fun wakeLockHeld(context: Context): Boolean = synchronized(lock) { wakeLock?.isHeld == true }
 
-    /** Called from Rust via JNI: static (`battery::is_ignoring_optimizations`). */
-    @JvmStatic
-    fun isIgnoringOptimizations(context: Context): Boolean {
-        val power = context.getSystemService(PowerManager::class.java)
-        return power.isIgnoringBatteryOptimizations(context.packageName)
-    }
-
-    /** Called from Rust via JNI: static (`battery::request_ignore_optimizations`). */
-    @JvmStatic
-    fun requestIgnoreOptimizations(context: Context): String? {
-        val app = context.applicationContext
-        val declared = try {
-            @Suppress("DEPRECATION")
-            app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS)
-                .requestedPermissions?.contains(Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) == true
-        } catch (e: PackageManager.NameNotFoundException) {
-            false
-        }
-        if (!declared) return "not-declared: ${Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS}"
-        @Suppress("BatteryLife")
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${app.packageName}"))
-        return startVisible(app, intent)
-    }
-
-    /** Called from Rust via JNI: static (`battery::open_settings`). */
-    @JvmStatic
-    fun openBatterySettings(context: Context): String? =
-        startVisible(context.applicationContext, Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-
     // ── called by the service ──────────────────────────────────────────
 
     internal fun goForeground(service: MobileForegroundService) {
@@ -455,26 +423,6 @@ object ForegroundServicePlugin : MobileActivityPlugin {
             context, request, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-    }
-
-    /** Start a system screen, while the app is visible only. */
-    private fun startVisible(context: Context, intent: Intent): String? {
-        val state = ActivityManager.RunningAppProcessInfo()
-        ActivityManager.getMyMemoryState(state)
-        if (state.importance > ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE) {
-            return "start-not-allowed: the app is not visible"
-        }
-        return try {
-            val current = activity?.get()
-            if (current != null && !current.isFinishing) {
-                current.runOnUiThread { current.startActivity(intent) }
-            } else {
-                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-            null
-        } catch (e: Exception) {
-            "platform: $e"
-        }
     }
 
     // ── to Rust ────────────────────────────────────────────────────────

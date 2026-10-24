@@ -110,6 +110,12 @@ mod subscribers {
         Network(Option<NetworkInfo>),
         /// Doze entered (`true`) or left.
         DeviceIdle(bool),
+        /// The battery-optimization exemption (feature `battery`): whether
+        /// the app is ignoring battery optimizations. Read again each time
+        /// the app becomes visible, and sent when it changed; the first
+        /// `subscribe()` reports the value at that moment.
+        #[cfg(feature = "battery")]
+        BatteryExemption(bool),
     }
 
     /// The default network.
@@ -172,6 +178,9 @@ mod subscribers {
         /// `Some(None)`: no network.
         pub network: Option<Option<NetworkInfo>>,
         pub device_idle: Option<bool>,
+        /// The battery-optimization exemption (feature `battery`).
+        #[cfg(feature = "battery")]
+        pub battery_exemption: Option<bool>,
     }
 
     impl SystemState {
@@ -181,6 +190,8 @@ mod subscribers {
             service: None,
             network: None,
             device_idle: None,
+            #[cfg(feature = "battery")]
+            battery_exemption: None,
         };
 
         fn apply(&mut self, event: &SystemEvent) {
@@ -190,6 +201,8 @@ mod subscribers {
                 SystemEvent::Service(e) => self.service = Some(e.clone()),
                 SystemEvent::Network(n) => self.network = Some(n.clone()),
                 SystemEvent::DeviceIdle(v) => self.device_idle = Some(*v),
+                #[cfg(feature = "battery")]
+                SystemEvent::BatteryExemption(v) => self.battery_exemption = Some(*v),
             }
         }
     }
@@ -394,6 +407,16 @@ mod subscribers {
             assert_eq!(state.service, Some(ServiceEvent::Started));
             publish(SystemEvent::Network(None));
             assert_eq!(current().network, Some(None));
+        }
+
+        #[cfg(feature = "battery")]
+        #[test]
+        fn current_keeps_the_battery_exemption() {
+            let _turn = lock(&TURN);
+            publish(SystemEvent::BatteryExemption(true));
+            assert_eq!(current().battery_exemption, Some(true));
+            publish(SystemEvent::BatteryExemption(false));
+            assert_eq!(current().battery_exemption, Some(false));
         }
 
         #[test]

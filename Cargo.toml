@@ -32,9 +32,13 @@ google-auth = []
 # (android/java/dev/highbay/libmobile/camera, src/android/camera.rs).
 camera = []
 # A foreground service with a notification, controlled from Rust on any
-# thread (android/java/dev/highbay/libmobile/service, src/android/service.rs,
-# src/android/battery.rs). Declare it with `gradle::Project::foreground_service`.
+# thread (android/java/dev/highbay/libmobile/service, src/android/service.rs).
+# Declare it with `gradle::Project::foreground_service`.
 foreground-service = []
+# Battery optimization and app sleeping: the exemption dialog, the settings
+# pages and the state (android/java/dev/highbay/libmobile/battery,
+# src/android/battery.rs). With `system-events`, `SystemEvent::BatteryExemption`.
+battery = []
 # System events for the app's own threads, from any thread, with no async
 # runtime (android/java/dev/highbay/libmobile/events, src/system_events.rs):
 # visibility, focus, the service, the default network and Doze.
