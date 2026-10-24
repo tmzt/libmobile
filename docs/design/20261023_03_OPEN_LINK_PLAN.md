@@ -106,3 +106,12 @@ pub fn check_link(url: &str) -> Result<(), OpenLinkError>;
    Recommended: yes; handlr needs only http.
 2. **No Cargo feature.** The call is small and needs no permission or
    manifest entry. Recommended: core, like the intent bridge.
+
+## Amendment — 2026-10-23 22:02 EDT: approved
+
+The owner approved the open-link plans in libmobile, libdevice and
+libmorph on 2026-10-23 ("approve plans"), without separate answers, so
+their recommendations stand: http and https only; libmobile's call is
+core, with no Cargo feature; the Mac uses `NSWorkspace`; libmorph's is a
+`MorphContext` method. The status stays `Draft` until the first commit
+that implements it.
