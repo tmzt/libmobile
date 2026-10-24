@@ -1,7 +1,7 @@
 ---
 title: App icons from PNGs, made into Android resources
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`gradle::Icon` and `Project::icon`: a master PNG (or PNGs at known
     sizes) declared in the app's build script"
@@ -181,3 +181,8 @@ source files would be pngs if bitmaps".
   file in the app's `OUT_DIR`), so the app declares the icon once.
 
 The status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-24 14:07 EDT: implementation has started; the document is now immutable
+
+Step 1 (the `icons` feature, `gradle::Icon`, `Project::icon`, the generated
+resources) is implemented on `main` from this commit, on the owner's word.

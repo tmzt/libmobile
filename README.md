@@ -61,6 +61,7 @@ examples/
 | `battery`     | `battery/BatteryPlugin`    | `android::battery`; a `<queries>` entry for Samsung's Device Care; with `system-events`, `SystemEvent::BatteryExemption` |
 | `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
+| `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
 ## Usage
 
@@ -153,6 +154,40 @@ that packages the `.so` cargo just built:
 cargo build --release --target aarch64-linux-android --lib
 gradle -p target/aarch64-linux-android/release/gradle/<package> assembleDebug
 ```
+
+### App icon
+
+With the `icons` feature on the build-dependency, the build script makes
+the launcher icon from PNGs:
+
+```toml
+[build-dependencies]
+libmobile = { version = "0.2", features = ["icons"] }
+```
+
+```rust
+use libmobile::gradle::{Icon, Project};
+
+Project::new("com.example.app")
+    .icon(
+        Icon::png("icon/icon-1024.png")          // square, at least 432 px
+            .background_color([0x20, 0x24, 0x2c]) // or .background_png(...); default white
+            .monochrome_png("icon/mono-1024.png"), // optional: themed icons (Android 13+)
+    )
+    .generate()
+    .expect("gradle project");
+```
+
+The master is scaled (Lanczos3) into the centre 66 dp of the 108 dp
+adaptive icon; `.full_bleed()` uses artwork already made for that canvas
+unchanged, and `Icon::pngs(&[(size, path), ...])` takes PNGs at known
+sizes. The project gets the adaptive icon (`mipmap-anydpi-v26`), its
+foreground, background and monochrome layers at every density, legacy
+square and round `ic_launcher` PNGs (48 to 192 px), and `android:icon` /
+`android:roundIcon` in the manifest. A source that is not a square PNG
+fails `generate()` with an error naming it. Without `icon()`, nothing
+changes. The feature stays off the app's normal dependency: nothing is
+added to the APK's native code.
 
 ### Foreground service
 

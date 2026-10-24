@@ -57,6 +57,10 @@ secure-store-no-strongbox = []
 # `key_store::Vault::memory()`, an in-memory vault for tests only. Normal
 # app builds do not have it.
 test-vault = []
+# `gradle::Icon` and `Project::icon`: launcher icons made from PNGs into
+# Android resources by the app's build script. Host only: it adds the
+# `image` crate (PNG only) to the build-dependency copy of libmobile.
+icons = ["dep:image"]
 
 [lib]
 # An rlib: the consuming app's own crate is the cdylib (`android_main`), and
@@ -69,6 +73,8 @@ log = "0.4"
 zeroize = { version = "1.8", features = ["derive"] }
 # `system_events::subscribe_tokio` (feature `tokio`): an unbounded channel only.
 tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
+# Decoding, scaling and encoding launcher icons (`gradle::Icon`, feature `icons`).
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

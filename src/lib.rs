@@ -70,6 +70,8 @@ pub mod camera;
 pub mod codegen;
 pub mod event;
 pub mod gradle;
+#[cfg(feature = "icons")]
+mod icon;
 pub mod insets;
 pub mod intent;
 pub mod key_store;

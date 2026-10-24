@@ -146,6 +146,8 @@ pub struct Project {
     /// The declared foreground service types, if any.
     service_types: Option<Vec<ServiceType>>,
     service_keeps_running: bool,
+    #[cfg(feature = "icons")]
+    icon: Option<Icon>,
 }
 
 impl Project {
@@ -162,6 +164,8 @@ impl Project {
             url_schemes: Vec::new(),
             service_types: None,
             service_keeps_running: false,
+            #[cfg(feature = "icons")]
+            icon: None,
         }
     }
 
@@ -259,6 +263,16 @@ impl Project {
         self
     }
 
+    /// The launcher icon, made from PNGs into the project's resources
+    /// (`mipmap-*`, the adaptive icon) with `android:icon` and
+    /// `android:roundIcon` on `<application>`. Without it the app has the
+    /// system's default icon. A later call replaces the icon.
+    #[cfg(feature = "icons")]
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
     pub fn sdk(mut self, min: u32, target: u32, compile: u32) -> Self {
         self.spec.min_sdk = min;
         self.spec.target_sdk = target;
@@ -342,10 +356,30 @@ impl Project {
                 }
             }
         }
+        // Read and check every icon source before writing anything.
+        #[cfg(feature = "icons")]
+        let icon_files = match &self.icon {
+            Some(icon) => {
+                for path in icon.paths() {
+                    println!("cargo:rerun-if-changed={}", path.display());
+                }
+                let (files, warnings) = icon.render()?;
+                for warning in warnings {
+                    println!("cargo:warning={warning}");
+                }
+                files
+            }
+            None => Vec::new(),
+        };
+        #[cfg(not(feature = "icons"))]
+        let icon_files: Vec<(String, Vec<u8>)> = Vec::new();
         let profile_dir = profile_dir(&PathBuf::from(env_var("OUT_DIR")?))?;
         let native_lib = profile_dir.join(format!("lib{}.so", self.spec.lib_name));
 
-        let dir = match (env::var_os("LIBMOBILE_GRADLE_PROJECT_DIR"), self.out_dir) {
+        let dir = match (
+            env::var_os("LIBMOBILE_GRADLE_PROJECT_DIR"),
+            self.out_dir.take(),
+        ) {
             (Some(dir), _) if !dir.is_empty() => PathBuf::from(dir),
             (_, Some(dir)) => dir,
             _ => profile_dir
@@ -354,15 +388,20 @@ impl Project {
         };
         for (name, contents) in self.spec.render(&libmobile_gradle, &native_lib, abi) {
             let contents = if name == MANIFEST {
-                let contents = with_url_schemes(&contents, &self.url_schemes);
-                match &service {
-                    Some(service) => with_service(&contents, &service.application),
-                    None => contents,
-                }
+                self.finish_manifest(&contents, service.as_ref())
             } else {
                 contents
             };
             write_if_changed(&dir.join(name), &contents)?;
+        }
+        for (name, contents) in &icon_files {
+            write_if_changed(&dir.join(name), contents)?;
+        }
+        // Icon files an earlier build made and this one does not.
+        for name in codegen::icon_resource_paths() {
+            if !icon_files.iter().any(|(n, _)| *n == name) {
+                remove_if_present(&dir.join(name))?;
+            }
         }
         // Remember the SDK cargo was run with, so a bare `gradle -p <dir>`
         // works without ANDROID_HOME in that shell.
@@ -370,13 +409,43 @@ impl Project {
             .iter()
             .find_map(|var| env::var(var).ok().filter(|v| !v.is_empty()))
         {
-            write_if_changed(&dir.join("local.properties"), &local_properties(&sdk))?;
+            write_if_changed(&dir.join("local.properties"), local_properties(&sdk))?;
         }
         Ok(Some(dir))
     }
 }
 
 const MANIFEST: &str = "app/src/main/AndroidManifest.xml";
+
+impl Project {
+    /// The rendered manifest with what the builder adds: the URL scheme
+    /// filters, the service and the icon attributes.
+    fn finish_manifest(
+        &self,
+        manifest: &str,
+        service: Option<&codegen::ServiceManifest>,
+    ) -> String {
+        let manifest = with_url_schemes(manifest, &self.url_schemes);
+        let manifest = match service {
+            Some(service) => with_service(&manifest, &service.application),
+            None => manifest,
+        };
+        #[cfg(feature = "icons")]
+        let manifest = match &self.icon {
+            Some(_) => with_icon(&manifest),
+            None => manifest,
+        };
+        manifest
+    }
+}
+
+/// The rendered manifest with `android:icon` and `android:roundIcon` on
+/// `<application>`.
+#[cfg(feature = "icons")]
+fn with_icon(manifest: &str) -> String {
+    const AFTER: &str = "        android:hasCode=\"true\"\n";
+    manifest.replacen(AFTER, &format!("{AFTER}{}", codegen::ICON_ATTRIBUTES), 1)
+}
 
 /// RFC 3986 `scheme`, lowercase only (Android matches schemes
 /// case-sensitively, and links arrive lowercased).
@@ -457,14 +526,251 @@ fn env_var(name: &str) -> io::Result<String> {
 }
 
 /// Unchanged files keep their mtime, so Gradle's up-to-date checks hold.
-fn write_if_changed(path: &Path, contents: &str) -> io::Result<()> {
-    if fs::read_to_string(path).ok().as_deref() == Some(contents) {
+fn write_if_changed(path: &Path, contents: impl AsRef<[u8]>) -> io::Result<()> {
+    let contents = contents.as_ref();
+    if fs::read(path).ok().as_deref() == Some(contents) {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, contents)
+}
+
+fn remove_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(feature = "icons")]
+pub use icons::Icon;
+
+#[cfg(feature = "icons")]
+mod icons {
+    use super::crate_path;
+    use crate::codegen::{self, IconBackground};
+    use crate::icon::{self, Background, Sources};
+    use image::RgbaImage;
+    use std::fs;
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    /// Generated files, as `(path relative to the project, bytes)`.
+    type Files = Vec<(String, Vec<u8>)>;
+
+    /// Below this a source is scaled up to the largest adaptive layer.
+    const MIN_SIZE: u32 = 432;
+
+    /// The app's launcher icon, from PNGs (feature `icons`), for
+    /// [`Project::icon`](super::Project::icon).
+    ///
+    /// ```no_run
+    /// use libmobile::gradle::{Icon, Project};
+    ///
+    /// Project::new("com.example.app")
+    ///     .icon(
+    ///         Icon::png("icon/icon-1024.png")
+    ///             .background_color([0x20, 0x40, 0x80])
+    ///             .monochrome_png("icon/monochrome-1024.png"),
+    ///     )
+    ///     .generate()
+    ///     .expect("gradle project");
+    /// ```
+    ///
+    /// Paths are relative to the crate root (or absolute). Each source is a
+    /// square PNG, treated as sRGB; one that is not a PNG, not square or
+    /// cannot be read fails [`Project::generate`](super::Project::generate)
+    /// with an error naming the file. Every size is scaled from them with
+    /// Lanczos3.
+    #[derive(Clone, Debug)]
+    #[non_exhaustive]
+    pub struct Icon {
+        /// `(declared size, path)`; `None` for the single master.
+        artwork: Vec<(Option<u32>, PathBuf)>,
+        background: BackgroundSource,
+        monochrome: Option<PathBuf>,
+        full_bleed: bool,
+    }
+
+    #[derive(Clone, Debug)]
+    enum BackgroundSource {
+        Color([u8; 3]),
+        Png(PathBuf),
+    }
+
+    impl Icon {
+        /// One square master PNG, at least 432 px (1024 recommended), with
+        /// transparency around the artwork. Every size is made from it. A
+        /// smaller one is scaled up, with a `cargo:warning`.
+        pub fn png(path: impl AsRef<Path>) -> Self {
+            Icon::new(vec![(None, crate_path(path.as_ref()))])
+        }
+
+        /// PNGs at known sizes, each square: an output whose artwork is that
+        /// many pixels uses it unscaled, and a size not given is made from
+        /// the largest one given. Panics on an empty list.
+        pub fn pngs(sizes: &[(u32, &Path)]) -> Self {
+            assert!(
+                !sizes.is_empty(),
+                "libmobile: Icon::pngs needs at least one PNG"
+            );
+            Icon::new(
+                sizes
+                    .iter()
+                    .map(|(size, path)| (Some(*size), crate_path(path)))
+                    .collect(),
+            )
+        }
+
+        fn new(artwork: Vec<(Option<u32>, PathBuf)>) -> Self {
+            Icon {
+                artwork,
+                background: BackgroundSource::Color([0xff, 0xff, 0xff]),
+                monochrome: None,
+                full_bleed: false,
+            }
+        }
+
+        /// The adaptive icon's background: a colour (the default, white) ...
+        pub fn background_color(mut self, rgb: [u8; 3]) -> Self {
+            self.background = BackgroundSource::Color(rgb);
+            self
+        }
+
+        /// ... or a square PNG, used at full bleed.
+        pub fn background_png(mut self, path: impl AsRef<Path>) -> Self {
+            self.background = BackgroundSource::Png(crate_path(path.as_ref()));
+            self
+        }
+
+        /// A single-colour PNG for themed icons (Android 13+), laid out like
+        /// the foreground.
+        pub fn monochrome_png(mut self, path: impl AsRef<Path>) -> Self {
+            self.monochrome = Some(crate_path(path.as_ref()));
+            self
+        }
+
+        /// The master already fills the 108 dp adaptive canvas (its artwork
+        /// inside the centre 66 dp); use it as the foreground unchanged.
+        /// Without this, the master is scaled into the centre 66 dp.
+        pub fn full_bleed(mut self) -> Self {
+            self.full_bleed = true;
+            self
+        }
+
+        /// Every source file.
+        pub(super) fn paths(&self) -> Vec<&Path> {
+            let mut paths: Vec<&Path> = self.artwork.iter().map(|(_, p)| p.as_path()).collect();
+            if let BackgroundSource::Png(path) = &self.background {
+                paths.push(path);
+            }
+            paths.extend(self.monochrome.as_deref());
+            paths
+        }
+
+        /// The generated files, as `(path relative to the project, bytes)`,
+        /// and the warnings to print.
+        pub(super) fn render(&self) -> io::Result<(Files, Vec<String>)> {
+            let mut warnings = Vec::new();
+            let mut artwork = Vec::new();
+            for (declared, path) in &self.artwork {
+                let image = read_png(path)?;
+                if let Some(size) = declared
+                    && image.width() != *size
+                {
+                    return Err(invalid(
+                        path,
+                        &format!("is {0}x{0} px, declared as {size} px", image.width()),
+                    ));
+                }
+                artwork.push(image);
+            }
+            let largest = (0..artwork.len())
+                .max_by_key(|&i| artwork[i].width())
+                .expect("an icon has artwork");
+            warn_if_small(&self.artwork[largest].1, &artwork[largest], &mut warnings);
+            let background_png = match &self.background {
+                BackgroundSource::Png(path) => {
+                    let image = read_png(path)?;
+                    warn_if_small(path, &image, &mut warnings);
+                    Some(image)
+                }
+                BackgroundSource::Color(_) => None,
+            };
+            let monochrome = match &self.monochrome {
+                Some(path) => {
+                    let image = read_png(path)?;
+                    warn_if_small(path, &image, &mut warnings);
+                    Some(image)
+                }
+                None => None,
+            };
+            let (background, xml_background) = match (&self.background, &background_png) {
+                (BackgroundSource::Color(rgb), _) => {
+                    (Background::Color(*rgb), IconBackground::Color(*rgb))
+                }
+                (BackgroundSource::Png(_), Some(png)) => {
+                    (Background::Png(png), IconBackground::Png)
+                }
+                (BackgroundSource::Png(_), None) => unreachable!("read above"),
+            };
+            let mut files = icon::icon_images(&Sources {
+                artwork: &artwork,
+                background,
+                monochrome: monochrome.as_ref(),
+                full_bleed: self.full_bleed,
+            });
+            files.extend(
+                codegen::adaptive_icon_xml(xml_background, monochrome.is_some())
+                    .into_iter()
+                    .map(|(name, xml)| (name, xml.into_bytes())),
+            );
+            Ok((files, warnings))
+        }
+    }
+
+    fn warn_if_small(path: &Path, image: &RgbaImage, warnings: &mut Vec<String>) {
+        if image.width() < MIN_SIZE {
+            warnings.push(format!(
+                "libmobile: icon {} is {} px, under {MIN_SIZE} px; it is scaled up",
+                path.display(),
+                image.width()
+            ));
+        }
+    }
+
+    fn invalid(path: &Path, what: &str) -> io::Error {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("libmobile: icon {} {what}", path.display()),
+        )
+    }
+
+    /// A square PNG, decoded to RGBA.
+    pub(super) fn read_png(path: &Path) -> io::Result<RgbaImage> {
+        const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+        let bytes = fs::read(path).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!("libmobile: icon {} cannot be read: {err}", path.display()),
+            )
+        })?;
+        if !bytes.starts_with(SIGNATURE) {
+            return Err(invalid(path, "is not a PNG"));
+        }
+        let image = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+            .map_err(|err| invalid(path, &format!("is not a valid PNG: {err}")))?
+            .to_rgba8();
+        if image.width() != image.height() || image.width() == 0 {
+            return Err(invalid(
+                path,
+                &format!("is not square ({}x{} px)", image.width(), image.height()),
+            ));
+        }
+        Ok(image)
+    }
 }
 
 #[cfg(test)]
@@ -499,6 +805,200 @@ mod tests {
         let end = with.find("</activity>").unwrap();
         assert!(launcher < filter && filter < end);
         assert_eq!(with.matches("</activity>").count(), 1);
+    }
+
+    fn rendered_manifest() -> String {
+        let spec = GradleProject::new("dev.example.app", "example_app");
+        let files = spec.render(Path::new("/l.gradle"), Path::new("/l.so"), "arm64-v8a");
+        files.into_iter().find(|(n, _)| *n == MANIFEST).unwrap().1
+    }
+
+    #[test]
+    fn manifest_without_icon_is_unchanged() {
+        let manifest = rendered_manifest();
+        let plain = Project::new("dev.example.app");
+        assert_eq!(plain.finish_manifest(&manifest, None), manifest);
+        assert!(!manifest.contains("android:icon") && !manifest.contains("roundIcon"));
+        let service = codegen::foreground_service_manifest(&[ServiceType::DataSync], false);
+        let full = Project::new("dev.example.app").url_scheme("handlr");
+        assert_eq!(
+            full.finish_manifest(&manifest, Some(&service)),
+            with_service(
+                &with_url_schemes(&manifest, &["handlr".into()]),
+                &service.application
+            )
+        );
+    }
+
+    #[cfg(feature = "icons")]
+    mod icons {
+        use super::*;
+        use crate::icon::tests::square;
+
+        struct TempDir(PathBuf);
+        impl TempDir {
+            fn new(name: &str) -> Self {
+                let dir = env::temp_dir()
+                    .join(format!("libmobile-icon-test-{name}-{}", std::process::id()));
+                fs::create_dir_all(&dir).unwrap();
+                TempDir(dir)
+            }
+            fn png(&self, name: &str, image: &image::RgbaImage) -> PathBuf {
+                let path = self.0.join(name);
+                image
+                    .save_with_format(&path, image::ImageFormat::Png)
+                    .unwrap();
+                path
+            }
+        }
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        #[test]
+        fn icon_adds_the_application_attributes() {
+            let manifest = rendered_manifest();
+            let with = Project::new("dev.example.app")
+                .icon(Icon::png("/icon.png"))
+                .finish_manifest(&manifest, None);
+            let application = with.find("<application").unwrap();
+            let icon = with.find("android:icon=\"@mipmap/ic_launcher\"").unwrap();
+            let round = with
+                .find("android:roundIcon=\"@mipmap/ic_launcher_round\"")
+                .unwrap();
+            let end = with[application..].find('>').unwrap() + application;
+            assert!(application < icon && icon < round && round < end);
+            assert_eq!(with.matches("android:icon=").count(), 1);
+            assert_eq!(with.replace(codegen::ICON_ATTRIBUTES, ""), manifest);
+        }
+
+        #[test]
+        fn icon_renders_every_file() {
+            let dir = TempDir::new("render");
+            let master = dir.png("icon.png", &square(1024, 100, 924, [255, 0, 0, 255]));
+            let mono = dir.png("mono.png", &square(1024, 100, 924, [255, 255, 255, 255]));
+            let icon = Icon::png(&master)
+                .background_color([1, 2, 3])
+                .monochrome_png(&mono);
+            assert_eq!(icon.paths(), [master.as_path(), mono.as_path()]);
+            let (files, warnings) = icon.render().unwrap();
+            assert!(warnings.is_empty(), "{warnings:?}");
+            assert_eq!(files.len(), 5 * 4 + 3);
+            let names: Vec<_> = files.iter().map(|(n, _)| n.clone()).collect();
+            let known = codegen::icon_resource_paths();
+            assert!(names.iter().all(|n| known.contains(n)), "{names:?}");
+            assert!(names.contains(&"app/src/main/res/values/ic_launcher_background.xml".into()));
+            assert!(
+                !names
+                    .iter()
+                    .any(|n| n.ends_with("ic_launcher_background.png"))
+            );
+        }
+
+        #[test]
+        fn background_png_replaces_the_colour() {
+            let dir = TempDir::new("background");
+            let master = dir.png("icon.png", &square(512, 0, 512, [255, 0, 0, 255]));
+            let back = dir.png("back.png", &square(300, 0, 300, [0, 0, 255, 255]));
+            let (files, warnings) = Icon::png(&master).background_png(&back).render().unwrap();
+            assert_eq!(files.len(), 5 * 4 + 2);
+            assert!(
+                files
+                    .iter()
+                    .any(|(n, _)| n.ends_with("mipmap-mdpi/ic_launcher_background.png"))
+            );
+            assert!(
+                !files
+                    .iter()
+                    .any(|(n, _)| n.ends_with(".xml") && n.contains("values"))
+            );
+            assert_eq!(warnings.len(), 1, "the 300 px background: {warnings:?}");
+            assert!(warnings[0].contains("back.png"));
+        }
+
+        #[test]
+        fn small_master_is_scaled_up_with_a_warning() {
+            let dir = TempDir::new("small");
+            let master = dir.png("small.png", &square(256, 0, 256, [0, 255, 0, 255]));
+            let (files, warnings) = Icon::png(&master).render().unwrap();
+            assert_eq!(files.len(), 5 * 3 + 3);
+            assert_eq!(warnings.len(), 1);
+            assert!(warnings[0].contains("small.png") && warnings[0].contains("256 px"));
+        }
+
+        #[test]
+        fn non_square_source_fails_naming_the_file() {
+            let dir = TempDir::new("square");
+            let wide = dir.png("wide.png", &image::RgbaImage::new(600, 500));
+            let err = Icon::png(&wide).render().unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+            let message = err.to_string();
+            assert!(
+                message.contains("wide.png") && message.contains("not square"),
+                "{message}"
+            );
+            let good = dir.png("good.png", &square(512, 0, 512, [1, 1, 1, 255]));
+            let err = Icon::png(&good).monochrome_png(&wide).render().unwrap_err();
+            assert!(err.to_string().contains("wide.png"));
+        }
+
+        #[test]
+        fn non_png_source_fails_naming_the_file() {
+            let dir = TempDir::new("format");
+            let jpeg = dir.0.join("icon.jpg");
+            fs::write(&jpeg, b"\xff\xd8\xff\xe0 not a png").unwrap();
+            let err = Icon::png(&jpeg).render().unwrap_err();
+            assert!(err.to_string().contains("icon.jpg") && err.to_string().contains("not a PNG"));
+            let broken = dir.0.join("broken.png");
+            fs::write(&broken, b"\x89PNG\r\n\x1a\ntruncated").unwrap();
+            let err = Icon::png(&broken).render().unwrap_err();
+            assert!(err.to_string().contains("broken.png"), "{err}");
+            let missing = dir.0.join("missing.png");
+            let err = Icon::png(&missing).render().unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::NotFound);
+            assert!(err.to_string().contains("missing.png"));
+        }
+
+        #[test]
+        fn declared_sizes_are_checked_and_used() {
+            let dir = TempDir::new("sizes");
+            let big = dir.png("big.png", &square(1024, 0, 1024, [9, 9, 9, 255]));
+            let small = dir.png("small.png", &square(66, 0, 66, [7, 7, 7, 255]));
+            let (files, warnings) = Icon::pngs(&[(1024, &big), (66, &small)]).render().unwrap();
+            assert!(warnings.is_empty());
+            let fg = &files
+                .iter()
+                .find(|(n, _)| n.ends_with("mipmap-mdpi/ic_launcher_foreground.png"))
+                .unwrap()
+                .1;
+            let fg = image::load_from_memory(fg).unwrap().to_rgba8();
+            assert_eq!(
+                fg.get_pixel(54, 54).0,
+                [7, 7, 7, 255],
+                "mdpi artwork is 66 px"
+            );
+            let err = Icon::pngs(&[(512, &big)]).render().unwrap_err();
+            assert!(err.to_string().contains("declared as 512 px"), "{err}");
+        }
+
+        #[test]
+        #[should_panic(expected = "at least one PNG")]
+        fn pngs_needs_a_png() {
+            let _ = Icon::pngs(&[]);
+        }
+    }
+
+    #[test]
+    fn stale_icon_files_are_removed() {
+        let dir = env::temp_dir().join(format!("libmobile-stale-test-{}", std::process::id()));
+        let file = dir.join("res/a.png");
+        write_if_changed(&file, b"png").unwrap();
+        remove_if_present(&file).unwrap();
+        assert!(!file.exists());
+        remove_if_present(&file).unwrap();
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
