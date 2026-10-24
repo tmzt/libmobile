@@ -1,7 +1,7 @@
 ---
 title: Opening a link in another app
 date: 2026-10-23
-status: In implementation
+status: Implemented
 covers:
   - "`open_link(url)`: ask Android to open an http or https URL in the
     app that handles it (normally the browser)"
@@ -121,3 +121,14 @@ that implements it.
 Implementation has started: step 1 (the call) starts with this commit.
 The status is now `In implementation`, and this document is immutable.
 Departures are recorded in CHANGES.md.
+
+## Amendment — 2026-10-23 23:37 EDT: implemented
+
+Every step is done:
+1. `3cdec74`, with the departures entry `9c2a646`.
+2. `2781f63` (the `wgpu` example) and the S23 results in `55d96bb`:
+   the browser opened, the log was redacted, `NotVisible` from a hidden
+   app; with Chrome disabled the link opened in Samsung Internet, so
+   `NoHandler` could not be produced on this phone, which the step
+   allows.
+3. libmobile 0.2.3 (`2c50e9d`, tag `v0.2.3`), on the owner's word.

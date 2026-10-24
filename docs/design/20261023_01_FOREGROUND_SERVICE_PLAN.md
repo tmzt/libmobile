@@ -549,3 +549,14 @@ its `BatteryPlugin`. `Project::request_ignore_battery_optimizations`
 stays. Step 4's battery-exemption comparison becomes that plan's step 3.
 The code built for section 5 (a81a650) is moved by that plan's step 1;
 nothing was released. Both ship together in 0.2.3.
+
+## Amendment — 2026-10-23 23:37 EDT: released in 0.2.3; step 4 still open
+
+Steps 1 to 3 are `a81a650`, `b2aa0ca`, `88bfe52` and `a923b6f`
+(departures `9b4ca69`, approved in the CHANGES entry before `2c50e9d`).
+Step 5 is libmobile 0.2.3 (`2c50e9d`, tag `v0.2.3`), released on the
+owner's word ("approve, bump versions if needed and release") before step
+4 is complete. Step 4's results so far are in CHANGES `1395d0f`; the
+checks that need the owner's hands (10 minutes with the screen off on
+each battery setting, the notification's buttons, swipes) remain. The
+status stays `In implementation` until they pass.

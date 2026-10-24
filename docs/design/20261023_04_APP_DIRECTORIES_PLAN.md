@@ -1,7 +1,7 @@
 ---
 title: The app's files and cache directories
 date: 2026-10-23
-status: In implementation
+status: Implemented
 covers:
   - "`android::dirs::files_dir()` and `cache_dir()`, from any thread"
 sources:
@@ -71,3 +71,12 @@ first commit that implements it.
 ## Amendment — 2026-10-23 23:34 EDT: implementation has started; the document is now immutable
 
 Step 1 starts with this commit.
+
+## Amendment — 2026-10-23 23:37 EDT: implemented
+
+Every step is done:
+1. `ac0f60e` and `ffad55b` (the `wgpu` example), checked on the S23
+   (`a23d613`): `files_dir()` and `cache_dir()` logged the app's
+   `files` and `cache` paths, equal to `internal_data_path()`, from
+   the main and another thread.
+2. libmobile 0.2.3 (`2c50e9d`, tag `v0.2.3`), on the owner's word.

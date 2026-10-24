@@ -252,3 +252,12 @@ The status stays `Draft` until the first commit that implements it.
 Implementation has started: step 1 (the feature and the API) starts with
 this commit. The status is now `In implementation`, and this document is
 immutable. Departures are recorded in CHANGES.md.
+
+## Amendment — 2026-10-23 23:37 EDT: released in 0.2.3; step 3 still open
+
+Steps 1 and 2 are `e76d8f7`, `a33edb5` and `6ea2f63` (departures
+`9c2a646`, approved). Step 4 is libmobile 0.2.3 (`2c50e9d`, tag
+`v0.2.3`), released on the owner's word before step 3 is complete.
+Step 3's results are in CHANGES `55d96bb`: everything passed except the
+Doze comparison, which needs the screen off and so the owner's hands. The
+status stays `In implementation` until it passes.
