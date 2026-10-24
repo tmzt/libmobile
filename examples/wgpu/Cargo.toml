@@ -13,9 +13,10 @@ crate-type = ["lib", "cdylib"]
 libmobile = { path = "../.." }
 log = "0.4"
 
-# The host copy, for `libmobile::gradle` in build.rs.
+# The host copy, for `libmobile::gradle` in build.rs; `icons` makes the
+# launcher icon from icon/*.png.
 [build-dependencies]
-libmobile = { path = "../.." }
+libmobile = { path = "../..", features = ["icons"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"
