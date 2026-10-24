@@ -627,3 +627,12 @@ vendor, make and model". libmobile reads `Build.MANUFACTURER`, `BRAND`
 and `MODEL` only; libmorph wraps them as `MorphContext::hardware()`.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-24 13:06 EDT — Build info approved; 0.2.4 planned
+
+Plans: `docs/design/20261024_02_BUILD_INFO_PLAN.md` and
+`docs/design/20261024_01_TRIM_MEMORY_PLAN.md` (both approved). On the
+owner's word ("approve, plan a 0.4.0 with what we've planned"), libmobile
+0.2.4 carries `build_info()` and `MobileEvent::TrimMemory`, so libmorph
+0.4.0 can wrap them with the foreground service, `open_link`, the app
+directories and memory pressure.
