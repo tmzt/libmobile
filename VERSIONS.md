@@ -89,3 +89,40 @@ additions. The commit is the one tagged `v0.2.2`.
 - `codegen::url_scheme_filters(&[String]) -> String`, the filters' XML.
 - `intent::redact_url(&str) -> String`: a URL cut after its path. The
   intent log line now uses it and leaves out extra values. That is not API.
+
+## 0.2.3 — 2026-10-23 (tag `v0.2.3`)
+
+The foreground service (`docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`),
+the battery exemption (`docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md`),
+opening links (`docs/design/20261023_03_OPEN_LINK_PLAN.md`) and the app's
+directories (`docs/design/20261023_04_APP_DIRECTORIES_PLAN.md`). All
+additions; `MobileEvent` is `#[non_exhaustive]`. The commit is the one
+tagged `v0.2.3`.
+
+- **Feature `foreground-service`:**
+  - `gradle::ServiceType` (`DataSync`, `Microphone`, `SpecialUse(reason)`,
+    `RemoteMessaging`), and `Project::foreground_service(types)` and
+    `foreground_service_keeps_running()`;
+  - `android::service`: `start`, `update`, `update_text`, `stop`,
+    `is_running`, `set_wake_lock`, `wake_lock_held`;
+  - the platform-free types in `service`: `ServiceOptions` (with `new`),
+    `NotificationContent` (with `new`), `NotificationAction` (with
+    `new`), `LockScreenVisibility`, `Controls`, `ControlLabels`,
+    `ServiceError`, and the constants `MAX_ACTIONS`, `EXIT_ACTION` and
+    `WAKE_LOCK_ACTION`;
+  - `MobileEvent::Service(ServiceEvent)`.
+- **Feature `battery`:** `android::battery`: `state`,
+  `is_ignoring_optimizations`, `request_ignore_optimizations`,
+  `open_settings`, `open_app_details`, `open_vendor_battery`; the types
+  `battery::{BatteryState, Page, BatteryError}`;
+  `Project::request_ignore_battery_optimizations()`.
+- **Feature `system-events`:** `system_events::{subscribe, current}`,
+  `Events` (`try_next`, `next_blocking`), `SystemEvent` (`Visible`,
+  `Focused`, `Service`, `Network`, `DeviceIdle`, and `BatteryExemption`
+  with `battery`), `ServiceEvent`, `NetworkInfo`, `Transport`,
+  `SystemState`.
+- **Feature `tokio`** (implies `system-events`):
+  `system_events::subscribe_tokio()`, adding `tokio` 1 with `sync` only.
+- **Core:** `link::{check_link, OpenLinkError}` and
+  `android::link::open_link` (http and https); `android::dirs::{files_dir,
+  cache_dir}`.
