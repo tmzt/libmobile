@@ -126,3 +126,19 @@ tagged `v0.2.3`.
 - **Core:** `link::{check_link, OpenLinkError}` and
   `android::link::open_link` (http and https); `android::dirs::{files_dir,
   cache_dir}`.
+
+## 0.2.4 — 2026-10-24 (tag `v0.2.4`)
+
+The device's build info (`docs/design/20261024_02_BUILD_INFO_PLAN.md`) and
+memory-trim levels (`docs/design/20261024_01_TRIM_MEMORY_PLAN.md`). All
+additions; `MobileEvent` and `SystemEvent` are `#[non_exhaustive]`. The
+commit is the one tagged `v0.2.4`.
+
+- **Core:** `android::build_info() -> Option<BuildInfo>` and
+  `build_info::BuildInfo { manufacturer, brand, model }` (also
+  `android::BuildInfo`): `Build.MANUFACTURER`, `BRAND` and `MODEL` only.
+- **Core:** `TrimLevel` (`RunningModerate`, `RunningLow`,
+  `RunningCritical`, `UiHidden`, `Background`, `Moderate`, `Complete`;
+  ordered) and `MobileEvent::TrimMemory(TrimLevel)`, from
+  `onTrimMemory`.
+- **Feature `system-events`:** `SystemEvent::TrimMemory(TrimLevel)`.
