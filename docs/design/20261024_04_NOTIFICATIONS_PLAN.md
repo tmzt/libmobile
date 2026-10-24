@@ -165,3 +165,12 @@ The rustdoc of both says this, and step 3 checks it.
    written; the service and alerts are separate features.
 2. **Channel per call.** `post` takes the channel each time, created on
    first use. Recommended: yes; an app usually has one or two.
+
+## Amendment — 2026-10-24 14:16 EDT: approved
+
+The owner approved the notification plans in libmobile and libmorph on
+2026-10-24 ("approve both"), with the recommended answers: the ongoing
+notification's tap is a `ServiceEvent::Tapped` and alerts' taps a
+`NotifyEvent`; `post` takes the channel each time, created on first use;
+libmorph adds the `on_notify` hook. The status stays `Draft` until the
+first commit that implements it.
