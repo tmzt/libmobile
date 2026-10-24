@@ -610,3 +610,11 @@ the battery exemption, system events, `open_link` and the app
 directories. Open link and app directories are Implemented. The
 foreground service (step 4) and the battery exemption (step 3) stay In
 implementation until the owner's S23 checks pass.
+
+## 2026-10-24 12:17 EDT — Memory pressure (approved)
+
+Plan: `docs/design/20261024_01_TRIM_MEMORY_PLAN.md` (Draft, approved). Requested by handlr on the
+owner's instruction, and approved by the owner ("approve them, the new
+hook in stages"): libmorph's `on_low_memory` first, over libmobile's
+existing `MobileEvent::LowMemory`; then libmobile's
+`MobileEvent::TrimMemory(TrimLevel)` and libmorph's `on_trim_memory`.
