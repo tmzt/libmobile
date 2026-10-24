@@ -360,3 +360,15 @@ of scope (the owner's change).
 The phone was left as found: Wi-Fi off, not in Doze, permissions as before
 (`POST_NOTIFICATIONS` granted to the example only), the example
 force-stopped.
+
+## 2026-10-23 21:27 EDT — Battery exemption and app sleeping (proposed)
+
+Plan: `docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md` (Draft). On the
+owner's request, relayed by the handlr session: a separate plan to let the
+user exempt the app from battery optimization, and reach Samsung's app
+sleeping lists, from inside the app. It proposes a feature `battery` of
+its own, taking the unreleased battery calls out of the foreground service
+plan's section 5, `BatteryState`, the settings pages, and
+`SystemEvent::BatteryExemption`.
+
+Proposed only; nothing is implemented until the owner approves.
