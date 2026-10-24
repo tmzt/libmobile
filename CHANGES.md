@@ -662,3 +662,58 @@ public API or behaviour beyond the plans:
   like `DirsPlugin`. `android::build_info()` keeps the first answer in a
   `OnceLock`; a failed call is logged at warn and tried again next time.
   `BuildInfo` is also re-exported as `android::BuildInfo`.
+
+## 2026-10-24 13:19 EDT — Build info step 1 on the S23
+
+Plan: `docs/design/20261024_02_BUILD_INFO_PLAN.md`, step 1 (`0586bec`
+library, `2df80ad` example, `ded93e9` README). Built with
+`examples/build.sh wgpu`, installed on the owner's S23
+(`timothys-s23-ultra:5555`, API 36) and started. The owner was using the
+phone (Termux, then handlr, in front), so the check waited until it had
+been idle and unlocked for over 2 minutes.
+
+Passed:
+- `I libmobile-wgpu: … wgpu example: build_info Some(BuildInfo { manufacturer: "samsung", brand: "samsung", model: "SM-S918U" })`
+- `getprop ro.product.manufacturer`, `ro.product.brand` and
+  `ro.product.model` give `samsung`, `samsung`, `SM-S918U`: the same.
+- No libmobile warning, no crash; the example went on to
+  `wgpu: up 1080x2316 Rgba8Unorm`. The generated registry lists
+  `bridge.BuildInfoPlugin` and `bridge.TrimMemoryPlugin` with the other
+  core bridges.
+
+Step 2 (release) waits for the owner.
+
+## 2026-10-24 13:19 EDT — Trim memory step 1 on the S23
+
+Plan: `docs/design/20261024_01_TRIM_MEMORY_PLAN.md`, step 1 (`be395e2`
+library, `60f34d3` example, `fe57842` README), same build and run as
+the build info check.
+
+Passed (each line is followed by the example's
+`wgpu example: TrimMemory(<level>)` on `android_main`):
+- With the app in front: `am send-trim-memory <package> RUNNING_CRITICAL`
+  gave `libmobile: trim memory 15 (RunningCritical)`. API 36 still
+  delivers a running level sent by `am`.
+- Home: the system sent `trim memory 20 (UiHidden)` by itself.
+- Hidden: `HIDDEN` gave `trim memory 20 (UiHidden)`; `BACKGROUND` gave
+  `trim memory 40 (Background)`; `MODERATE` gave `60 (Moderate)`;
+  `COMPLETE` gave `80 (Complete)`.
+- Unknown raw levels on the device: `50` gave `trim memory 50
+  (Background)`, `70` gave `trim memory 70 (Moderate)`: the nearest
+  lower known level.
+
+Refused by `am`, not by libmobile:
+- `UI_HIDDEN`: `Error: Unknown level option: UI_HIDDEN`. `am` names
+  that level `HIDDEN` (`am help`: `HIDDEN|RUNNING_MODERATE|BACKGROUND|
+  RUNNING_LOW|MODERATE|RUNNING_CRITICAL|COMPLETE`); the plan's command
+  should read `HIDDEN`.
+- `BACKGROUND`, `MODERATE`, `COMPLETE` while the app was in front:
+  `IllegalArgumentException: Unable to set a background trim level on a
+  foreground process`.
+- `RUNNING_LOW` and `RUNNING_MODERATE` after `RUNNING_CRITICAL`:
+  `Unable to set a higher trim level than current level` (`am` only
+  raises the process's level).
+
+The example was force-stopped afterwards (no pid left). The launcher was
+then in front; Termux, which the owner had in front, was not brought back.
+Step 2 (release) waits for the owner.
