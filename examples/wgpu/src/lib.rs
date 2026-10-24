@@ -16,7 +16,8 @@
 //! At start it logs the app's files and cache directories
 //! (`android::dirs`), and whether the files directory is
 //! `AndroidApp::internal_data_path()`, and the device's manufacturer, brand
-//! and model (`android::build_info`).
+//! and model (`android::build_info`). It logs each `MobileEvent::TrimMemory`
+//! (try `adb shell am send-trim-memory <package> UI_HIDDEN`).
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -92,6 +93,7 @@ mod app {
                 MobileEvent::Resume => self.resumed = true,
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
+                MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
                 // A `libmobile-wgpu://` link (see build.rs). Logged redacted:
                 // its query or fragment may be a secret.
                 MobileEvent::Intent(intent) => {
