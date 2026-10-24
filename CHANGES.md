@@ -545,3 +545,13 @@ checked: `get-role-holders` gives `com.android.chrome`, and the next
 link opened in Chrome), Samsung Internet force-stopped, the example
 force-stopped. The owner may want to check that Samsung Internet's
 first-run screens and Chrome's default-browser setting look as before.
+
+## 2026-10-23 23:30 EDT — App storage directories (proposed)
+
+Plan: `docs/design/20261023_04_APP_DIRECTORIES_PLAN.md` (Draft). On the owner's request, relayed by the
+handlr session: "libmorph should provide a persistent storage location on
+all platforms, with mkdir_all". libmobile gives Android's files and cache
+directories, libdevice the desktop paths by app id, and libmorph creates
+them before `init` as `MorphContext::storage_dir()` and `cache_dir()`.
+
+Proposed only; nothing is implemented until the owner approves.
