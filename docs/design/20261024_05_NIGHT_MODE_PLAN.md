@@ -48,3 +48,38 @@ pub fn night_mode(app: &AndroidApp) -> Option<bool>;
    following `ConfigChanged`.
 2. **Release** in the next libmobile release, on the owner's word.
    Additive.
+
+## Amendment — 2026-10-24 15:37 EDT: the system bars' icons
+
+The owner's direction on scope, relayed by the handlr session
+(2026-10-24): the system bars "should follow our theme background and
+titlebar colors", in this plan rather than a later one. Proposed for the
+owner's approval; it adds to section 1 and step 1.
+
+`bridge.WindowInsetsPlugin` already makes every generated app draw
+edge-to-edge on every API level (`setDecorFitsSystemWindows(false)`), so
+the app draws behind the status and navigation bars. From Android 15 (the
+generated projects' target SDK) Android ignores the bars' background
+colours anyway. So libmobile does not paint the bars; libmorph does, in
+the app's own frame (its plan's amendment). libmobile adds the part only
+the platform can do:
+
+```rust
+/// Dark (true) or light icons on the status and navigation bars,
+/// against what the app draws behind them. Any thread; applied on the UI
+/// thread (WindowInsetsController.setSystemBarsAppearance, API 30, and
+/// the older View flags on API 29).
+pub fn set_system_bar_icons(status_dark: bool, navigation_dark: bool);
+```
+
+It also turns off the system's contrast scrims
+(`isStatusBarContrastEnforced`, `isNavigationBarContrastEnforced`, API
+29) and makes both bars' own colours transparent, so on any API level
+only what the app draws shows behind the bars. The current icons are kept
+across `WindowCreated`, since a new window resets them.
+
+Step 1 also checks, on the S23, with 3-button navigation and with
+gestures: `set_system_bar_icons(true, true)` gives dark icons and
+`(false, false)` light ones (`dumpsys window` shows the appearance
+flags, and a screenshot shows the icons), with no scrim over the
+navigation bar.
