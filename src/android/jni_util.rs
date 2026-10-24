@@ -1,7 +1,9 @@
 //! The two JNI shapes every Rust -> Kotlin call shares, in one place.
 
 use android_activity::AndroidApp;
-use jni::objects::{Global, JClass, JObject, JObjectArray, JString};
+#[cfg(any(feature = "foreground-service", feature = "notifications"))]
+use jni::objects::JObjectArray;
+use jni::objects::{Global, JClass, JObject, JString};
 use jni::sys::jobject;
 use jni::{Env, jni_sig, jni_str};
 
@@ -109,6 +111,7 @@ pub(crate) fn opt_string(value: &JString<'_>) -> Option<String> {
 }
 
 /// A `String[]` of `items`.
+#[cfg(any(feature = "foreground-service", feature = "notifications"))]
 pub(crate) fn string_array<'local>(
     env: &mut Env<'local>,
     items: &[&str],
