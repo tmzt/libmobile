@@ -840,3 +840,93 @@ Proposed only; nothing is implemented until the owner approves.
 Plan: `docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md` (Draft, approved). The owner approved the text
 input plans ("yes"), with the recommended answers. Released after the
 notification and dark mode work.
+
+## 2026-10-24 16:21 EDT — Notifications steps 1 and 2 built; step 3 on the S23 partly checked
+
+Plan: `docs/design/20261024_04_NOTIFICATIONS_PLAN.md` (now In
+implementation), step 1 (`6e83eef` library and README, `bf0c356` a
+dead-code fix), step 2 (`d1676ad` the `background` example).
+
+Small departures (step 1), none changing the planned API:
+- `NotificationContent`, `NotificationAction`, `LockScreenVisibility` and
+  `MAX_ACTIONS` moved into a private `notification` module, compiled under
+  `foreground-service` or `notifications`, so alerts can use them without
+  the service. `service` re-exports them as before, and `notify` (and
+  `android::notify`) re-export them too; every existing path still works.
+- A tag over 256 bytes is refused before Android is asked, as
+  `ServiceError::Platform` and `NotifyError::Platform` with the message
+  "the notification's tag is longer than 256 bytes": the plan names the
+  limit but no error for it. `NotifyError::BadId` also covers an empty
+  button id. Alert button ids may start with `libmobile.` (alerts have no
+  built-in controls).
+- Besides `libmobile.notification` and `libmobile.tag`, the tap intents
+  carry `libmobile.kind` (`service` or `alert`), since an alert may have
+  any id, and `libmobile.action` for an alert's button that opens the app.
+  The service's notification's id extra is `libmobile.foreground`. A host
+  test checks the names against the Kotlin sources.
+- The service's body tap now carries `CLEAR_TOP | SINGLE_TOP`, so a
+  running activity receives it through `onNewIntent` (before, it only
+  brought the task forward, and no intent was delivered). A tap reaching a
+  recreated activity (`savedInstanceState` set) is not delivered again.
+- An alert's button that does not open the app goes to a new
+  `notify.NotifyActionReceiver` (in the manifest, not exported), which loads
+  the app's library if no activity has (`NativeLib.ensureLoaded(Context)`)
+  and queues `NotifyEvent::Action` for the main loop. Buttons do not
+  remove the alert; the app cancels it. Each alert's and button's
+  PendingIntent is kept apart with `Intent.setIdentifier` (API 29).
+- `bf0c356`: `jni_util::string_array` is compiled only with a feature that
+  posts a notification. `6e83eef` gave a dead-code warning when libmobile
+  was built for Android alone with no features; the workspace check did not
+  show it, as the `background` example turns the features on.
+
+Step 1, passed:
+- `cargo fmt --all -- --check`; host `cargo clippy --workspace
+  --all-targets` with no features and `--all-features`; `cargo clippy
+  --target aarch64-linux-android --workspace --all-targets` with no
+  features, `--features notifications`, `--features
+  foreground-service,notifications,system-events` and `--all-features`,
+  and `-p libmobile` alone: no warnings. `cargo test --workspace` (112
+  lib tests) and `cargo test -p libmobile --all-features` (143): all pass.
+- A generated project with `notifications` builds (`examples/build.sh
+  background`). `aapt dump xmltree`: `POST_NOTIFICATIONS`, and
+  `<receiver android:name="dev.highbay.libmobile.notify.NotifyActionReceiver"
+  android:exported=false>`; `dexdump`: `notify/NotifyPlugin` and
+  `notify/NotifyActionReceiver`.
+
+Step 2: the example builds, installs (`adb install -r`: Success) and runs
+on the S23 (API 36): the service started, and `--es cmd alert` posted.
+
+Step 3 on the S23 (`timothys-s23-ultra:5555`), passed:
+- The alert is on its own channel: `dumpsys notification --noredact`:
+  `NotificationRecord(... pkg=dev.highbay.libmobile.example.background
+  id=27757 tag=example importance=4 ... channel=alerts ... flags=AUTO_CANCEL
+  actions=2`, `android.title=String (libmobile alert example)`,
+  `android.text=String (alert number 1)`, buttons `"Ack" ->
+  ... broadcastIntent` and `"Open" -> ... startActivity`, and
+  `stats=... isNoisy=true`. The package's channels:
+  `NotificationChannel{mId='alerts', mName=Alerts, mImportance=4, ...
+  mSound=content://settings/system/notification_sound` and
+  `NotificationChannel{mId='libmob...', mName=Running in the background,
+  mImportance=2`. Whether the phone sounded was not heard.
+- Updates from the network thread while the activity was stopped
+  (`Visible(false)` from 15:58:26): `update 2 (tag update-2): Ok(())` at
+  15:58:41 and `update 3 (tag update-3): Ok(())` at 15:59:11; the shade
+  showed `libmobile background, update 1`, then `update 2`. The ongoing
+  notification's flags: `ONGOING_EVENT|ONLY_ALERT_ONCE|NO_CLEAR|FOREGROUND_SERVICE`.
+  After the service stopped, `update 4 (tag update-4): Err(NotRunning)`.
+
+Not checked:
+- Tapping (the alert's body and buttons, the ongoing notification's body),
+  replacing and cancelling, the cold start, the screen-off updates, and
+  `PermissionDenied`. Two taps meant for the app's notification group
+  in the shade (15:58 to 15:59) landed elsewhere: the shade had closed or
+  moved, and the owner appears to have been using the phone at the same
+  time (Google's app came forward, every notification was cleared, the
+  example's task was removed at 15:59:25, which stopped its service, and
+  handlr came forward). From 16:00 to 16:20 Termux or handlr was in front
+  with recent touches, so the screen was not taken again.
+- The battery dialog the example opens was answered while the phone was
+  in use (the example was exempt at 15:59:22); the exemption was removed
+  again (`dumpsys deviceidle whitelist -dev.highbay.libmobile.example.background`:
+  `Removed`). Night mode, the navigation mode and `POST_NOTIFICATIONS`
+  (granted) were not changed. Both examples were force-stopped (no pid).
