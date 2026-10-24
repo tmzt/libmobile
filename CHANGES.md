@@ -717,3 +717,9 @@ Refused by `am`, not by libmobile:
 The example was force-stopped afterwards (no pid left). The launcher was
 then in front; Termux, which the owner had in front, was not brought back.
 Step 2 (release) waits for the owner.
+
+## 2026-10-24 13:32 EDT — Released libmobile 0.2.4
+
+On the owner's word ("Yes, go ahead with all three"): libmobile 0.2.4
+(`27f3f74`, tag `v0.2.4`) with `build_info()` and
+`MobileEvent::TrimMemory`, both Implemented. libmorph 0.4.1 wraps them.
