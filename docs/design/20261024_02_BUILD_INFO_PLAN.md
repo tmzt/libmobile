@@ -1,7 +1,7 @@
 ---
 title: The device's vendor, make and model
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`android::build_info() -> BuildInfo { manufacturer, brand, model }`,
     from `android.os.Build`, and nothing that identifies the person or the
@@ -75,3 +75,7 @@ plan a 0.4.0 with what we've planned"). It ships in libmobile 0.2.4, with
 the trim-memory event (`docs/design/20261024_01_TRIM_MEMORY_PLAN.md`),
 so libmorph 0.4.0 can wrap both. `build_info()` keeps its name. The
 status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-24 13:08 EDT: implementation has started; the document is now immutable
+
+Step 1 starts with this commit.

@@ -258,6 +258,22 @@ let files = dirs::files_dir();   // Some("/data/user/0/<package>/files")
 let cache = dirs::cache_dir();   // Some("/data/user/0/<package>/cache")
 ```
 
+### Build info
+
+`android::build_info()` gives the device's manufacturer, brand and model
+(`Build.MANUFACTURER`, `BRAND` and `MODEL`) from any thread, read once and
+kept. Only those three: libmobile never reads the serial, `ANDROID_ID`,
+the IMEI, the advertising ID, the fingerprint, or anything else that
+identifies the unit or its owner. A missing value is empty; `None` only if
+the JNI call fails, which is logged.
+
+```rust
+if let Some(info) = libmobile::android::build_info() {
+    // "samsung", "samsung", "SM-S918U"
+    log::info!("{} {} {}", info.manufacturer, info.brand, info.model);
+}
+```
+
 ### System events
 
 With the `system-events` feature, any thread can follow what happens to the

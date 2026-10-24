@@ -17,7 +17,7 @@
 //!   the staged root to Gradle's `sourceSets` and applies the plugins'
 //!   contributions (AARs, permissions, manifest elements). See [`codegen`].
 //! * **Rust**: platform-free types ([`insets`], [`intent`], [`link`], [`event`],
-//!   [`worker`], [`mailbox`]) that build and test on any host, and the
+//!   [`build_info`], [`worker`], [`mailbox`]) that build and test on any host, and the
 //!   `android` module (target_os = "android") with the JNI bridges and
 //!   [`android::run`].
 //!
@@ -64,6 +64,7 @@ pub mod audio_capture;
 pub mod auth;
 #[cfg(feature = "battery")]
 pub mod battery;
+pub mod build_info;
 #[cfg(feature = "camera")]
 pub mod camera;
 pub mod codegen;

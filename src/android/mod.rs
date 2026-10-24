@@ -25,6 +25,7 @@ pub mod audio_capture;
 pub mod auth;
 #[cfg(feature = "battery")]
 pub mod battery;
+mod build_info;
 #[cfg(feature = "camera")]
 pub mod camera;
 pub mod dirs;
@@ -51,6 +52,7 @@ pub use android_activity::{AndroidApp, InputStatus};
 pub use audio_capture::CaptureStream;
 #[cfg(feature = "google-auth")]
 pub use auth::start_google_login;
+pub use build_info::{BuildInfo, build_info};
 #[cfg(feature = "camera")]
 pub use camera::capture_photo;
 #[cfg(feature = "cpal")]
