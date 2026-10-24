@@ -601,3 +601,12 @@ release"):
   other than the UI thread start from the Application context in a new
   task (entry 9c2a646). Apps answering an intent while hidden wait for
   `Resume` before `open_link`; that is documented, not changed.
+
+## 2026-10-23 23:37 EDT — Released libmobile 0.2.3
+
+On the owner's word ("approve, bump versions if needed and release"):
+libmobile 0.2.3 (`2c50e9d`, tag `v0.2.3`) with the foreground service,
+the battery exemption, system events, `open_link` and the app
+directories. Open link and app directories are Implemented. The
+foreground service (step 4) and the battery exemption (step 3) stay In
+implementation until the owner's S23 checks pass.
