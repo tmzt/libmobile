@@ -537,3 +537,15 @@ This replaces answer 1 of the amendment "approved", section 7's question
 Implementation has started: step 1 (the service) starts with this commit.
 The status is now `In implementation`, and this document is immutable.
 Departures are recorded in CHANGES.md.
+
+## Amendment — 2026-10-23 22:02 EDT: the battery calls move to their own plan
+
+On the owner's instruction (2026-10-23: "approve plans", approving
+`docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md` with its question 1
+answered yes). This replaces section 5 and the `android::battery` part
+of step 1: the battery-optimization calls move to the feature `battery`
+under that plan, return its `BatteryError`, and their Kotlin moves to
+its `BatteryPlugin`. `Project::request_ignore_battery_optimizations`
+stays. Step 4's battery-exemption comparison becomes that plan's step 3.
+The code built for section 5 (a81a650) is moved by that plan's step 1;
+nothing was released. Both ship together in 0.2.3.
