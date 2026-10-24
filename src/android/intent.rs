@@ -5,7 +5,7 @@
 //! `NativeActivity` swallows). Runs on the UI thread, so it only queues.
 
 use super::jni_util::opt_string;
-use crate::intent::{IntentData, redact_url};
+use crate::intent::{IntentData, NotificationTap, redact_url};
 use crate::mailbox::Mailbox;
 use jni::objects::{JObject, JObjectArray, JString};
 use jni::sys::jboolean;
@@ -61,6 +61,53 @@ pub extern "system" fn Java_dev_highbay_libmobile_bridge_IntentPlugin_nativeInte
             intent.is_new,
         );
         PENDING.push(intent);
+        Ok(())
+    });
+    outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>()
+}
+
+/// Kotlin -> Rust: `IntentPlugin.nativeNotificationTap(String?, String,
+/// String?, String?)`: a tap on a notification libmobile posted, from its
+/// intent's extras (`crate::intent::tap_extras`), delivered instead of
+/// `MobileEvent::Intent`.
+#[allow(unsafe_code)] // Scoped: the `#[unsafe(no_mangle)]` JNI export symbol.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_highbay_libmobile_bridge_IntentPlugin_nativeNotificationTap<
+    'caller,
+>(
+    mut unowned_env: EnvUnowned<'caller>,
+    _this: JObject<'caller>,
+    kind: JString<'caller>,
+    id: JString<'caller>,
+    tag: JString<'caller>,
+    action: JString<'caller>,
+) {
+    let outcome = unowned_env.with_env(|_env| -> Result<(), jni::errors::Error> {
+        let tap = NotificationTap::from_extras(
+            opt_string(&kind),
+            opt_string(&id).unwrap_or_default(),
+            opt_string(&tag),
+            opt_string(&action),
+        );
+        match tap {
+            #[cfg(feature = "foreground-service")]
+            Some(NotificationTap::Service { tag }) => {
+                log::info!(
+                    "libmobile: service notification tapped (tag: {})",
+                    tag.is_some()
+                );
+                super::service::deliver(crate::system_events::ServiceEvent::Tapped(tag));
+            }
+            #[cfg(feature = "notifications")]
+            Some(NotificationTap::Alert { id, tag }) => {
+                super::notify::deliver(crate::notify::NotifyEvent::Tapped { id, tag })
+            }
+            #[cfg(feature = "notifications")]
+            Some(NotificationTap::AlertAction { id, action }) => {
+                super::notify::deliver(crate::notify::NotifyEvent::Action { id, action })
+            }
+            other => log::warn!("libmobile: a notification tap not delivered: {other:?}"),
+        }
         Ok(())
     });
     outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>()

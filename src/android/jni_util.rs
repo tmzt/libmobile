@@ -1,7 +1,7 @@
 //! The two JNI shapes every Rust -> Kotlin call shares, in one place.
 
 use android_activity::AndroidApp;
-use jni::objects::{Global, JClass, JObject, JString};
+use jni::objects::{Global, JClass, JObject, JObjectArray, JString};
 use jni::sys::jobject;
 use jni::{Env, jni_sig, jni_str};
 
@@ -106,4 +106,18 @@ pub(crate) fn with_activity<R>(
 /// A nullable Java string argument as an `Option`.
 pub(crate) fn opt_string(value: &JString<'_>) -> Option<String> {
     (!value.is_null()).then(|| value.to_string())
+}
+
+/// A `String[]` of `items`.
+pub(crate) fn string_array<'local>(
+    env: &mut Env<'local>,
+    items: &[&str],
+) -> jni::errors::Result<JObjectArray<'local, JString<'local>>> {
+    let empty = JString::from_str(env, "")?;
+    let array = JObjectArray::<JString>::new(env, items.len(), &empty)?;
+    for (i, item) in items.iter().enumerate() {
+        let item = JString::from_str(env, item)?;
+        array.set_element(env, i, &item)?;
+    }
+    Ok(array)
 }

@@ -32,10 +32,11 @@ pub use crate::service::{
 };
 pub use crate::system_events::ServiceEvent;
 
-use super::jni_util::{opt_string, with_application_class};
+use super::jni_util::{opt_string, string_array, with_application_class};
+use super::notification::ContentArgs;
 use crate::mailbox::Mailbox;
 use crate::service::check_content;
-use jni::objects::{JClass, JObject, JObjectArray, JString};
+use jni::objects::{JClass, JObject, JString};
 use jni::sys::jint;
 use jni::{Env, EnvUnowned, jni_sig, jni_str};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -72,7 +73,7 @@ pub fn start(options: &ServiceOptions) -> Result<(), ServiceError> {
             class,
             jni_str!("start"),
             jni_sig!(
-                "(Landroid/content/Context;ILjava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;IIZZZ[Ljava/lang/String;Z)Ljava/lang/String;"
+                "(Landroid/content/Context;ILjava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;IILjava/lang/String;ZZZ[Ljava/lang/String;Z)Ljava/lang/String;"
             ),
             &[
                 context.into(),
@@ -83,6 +84,7 @@ pub fn start(options: &ServiceOptions) -> Result<(), ServiceError> {
                 (&content.labels).into(),
                 content.opens.into(),
                 content.visibility.into(),
+                (&content.tag).into(),
                 options.controls.ongoing.into(),
                 options.controls.exit.into(),
                 options.controls.wake_lock_toggle.into(),
@@ -96,8 +98,13 @@ pub fn start(options: &ServiceOptions) -> Result<(), ServiceError> {
     Ok(())
 }
 
-/// Replace the notification's content. [`ServiceError::NotRunning`] while
-/// stopped.
+/// Replace the notification's title, text, buttons, visibility and tag.
+///
+/// From any thread, including while the activity is stopped or its window
+/// destroyed (no frames drawn), as long as the service runs;
+/// [`ServiceError::NotRunning`] otherwise. The notification is posted again
+/// at once, without sound or heads-up (`setOnlyAlertOnce`), so frequent
+/// updates do not disturb.
 pub fn update(content: &NotificationContent) -> Result<(), ServiceError> {
     check_content(content, BUILTIN_BUTTONS.load(Ordering::Relaxed))?;
     call_status(|env, context, class| {
@@ -106,7 +113,7 @@ pub fn update(content: &NotificationContent) -> Result<(), ServiceError> {
             class,
             jni_str!("update"),
             jni_sig!(
-                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;II)Ljava/lang/String;"
+                "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;[Ljava/lang/String;IILjava/lang/String;)Ljava/lang/String;"
             ),
             &[
                 context.into(),
@@ -116,14 +123,17 @@ pub fn update(content: &NotificationContent) -> Result<(), ServiceError> {
                 (&content.labels).into(),
                 content.opens.into(),
                 content.visibility.into(),
+                (&content.tag).into(),
             ],
         )?
         .l()
     })
 }
 
-/// Replace only the notification's text. [`ServiceError::NotRunning`] while
-/// stopped.
+/// Replace only the notification's text, keeping the title, buttons and
+/// tag. From any thread, under the same terms as [`update`]: while the
+/// service runs, also with the activity stopped, posted at once without
+/// sound or heads-up; [`ServiceError::NotRunning`] otherwise.
 pub fn update_text(text: &str) -> Result<(), ServiceError> {
     call_status(|env, context, class| {
         let text = JString::from_str(env, text)?;
@@ -176,50 +186,6 @@ pub fn set_wake_lock(held: bool) -> Result<(), ServiceError> {
 /// Whether the service holds its wake lock. `false` if the JNI call fails.
 pub fn wake_lock_held() -> bool {
     call_bool(jni_str!("wakeLockHeld"))
-}
-
-/// The notification content as JNI arguments.
-struct ContentArgs<'local> {
-    title: JString<'local>,
-    text: JString<'local>,
-    ids: JObjectArray<'local, JString<'local>>,
-    labels: JObjectArray<'local, JString<'local>>,
-    /// Bit `i`: action `i` opens the app.
-    opens: jint,
-    visibility: jint,
-}
-
-impl<'local> ContentArgs<'local> {
-    fn new(env: &mut Env<'local>, content: &NotificationContent) -> jni::errors::Result<Self> {
-        let ids: Vec<&str> = content.actions.iter().map(|a| a.id.as_str()).collect();
-        let labels: Vec<&str> = content.actions.iter().map(|a| a.label.as_str()).collect();
-        let opens = content
-            .actions
-            .iter()
-            .enumerate()
-            .fold(0, |bits, (i, a)| bits | (jint::from(a.opens_app) << i));
-        Ok(Self {
-            title: JString::from_str(env, &content.title)?,
-            text: JString::from_str(env, &content.text)?,
-            ids: string_array(env, &ids)?,
-            labels: string_array(env, &labels)?,
-            opens,
-            visibility: content.visibility.code(),
-        })
-    }
-}
-
-fn string_array<'local>(
-    env: &mut Env<'local>,
-    items: &[&str],
-) -> jni::errors::Result<JObjectArray<'local, JString<'local>>> {
-    let empty = JString::from_str(env, "")?;
-    let array = JObjectArray::<JString>::new(env, items.len(), &empty)?;
-    for (i, item) in items.iter().enumerate() {
-        let item = JString::from_str(env, item)?;
-        array.set_element(env, i, &item)?;
-    }
-    Ok(array)
 }
 
 /// Run `f` against the plugin class with the Application, catching a thrown
@@ -307,7 +273,7 @@ pub extern "system" fn Java_dev_highbay_libmobile_service_ForegroundServicePlugi
 }
 
 /// To the main loop (and, under `system-events`, to subscribers).
-fn deliver(event: ServiceEvent) {
+pub(crate) fn deliver(event: ServiceEvent) {
     #[cfg(feature = "system-events")]
     crate::system_events::publish(crate::system_events::SystemEvent::Service(event.clone()));
     EVENTS.push(event);

@@ -77,6 +77,10 @@ pub mod intent;
 pub mod key_store;
 pub mod link;
 pub mod mailbox;
+#[cfg(any(feature = "foreground-service", feature = "notifications"))]
+mod notification;
+#[cfg(feature = "notifications")]
+pub mod notify;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]
 pub mod service;

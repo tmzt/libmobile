@@ -20,91 +20,18 @@
 //! options.controls = controls;
 //! ```
 
-use crate::codegen::ServiceType;
-use std::fmt;
+pub use crate::notification::{
+    LockScreenVisibility, MAX_ACTIONS, NotificationAction, NotificationContent,
+};
 
-/// Android shows at most this many buttons on a notification.
-pub const MAX_ACTIONS: usize = 3;
+use crate::codegen::ServiceType;
+use crate::notification::{TAG_TOO_LONG, tag_too_long};
+use std::fmt;
 
 /// The id of the built-in Exit button ([`Controls::exit`]).
 pub const EXIT_ACTION: &str = "libmobile.exit";
 /// The id of the built-in wake-lock button ([`Controls::wake_lock_toggle`]).
 pub const WAKE_LOCK_ACTION: &str = "libmobile.wake_lock";
-
-/// What the notification shows. Tapping its body opens the app.
-#[derive(Clone, Debug, Default, PartialEq)]
-#[non_exhaustive]
-pub struct NotificationContent {
-    pub title: String,
-    pub text: String,
-    /// The app's own buttons. With the built-in controls, at most
-    /// [`MAX_ACTIONS`] buttons in all, Android's limit; more is
-    /// [`ServiceError::TooManyActions`].
-    pub actions: Vec<NotificationAction>,
-    /// On the lock screen. Default [`LockScreenVisibility::Private`].
-    pub visibility: LockScreenVisibility,
-}
-
-impl NotificationContent {
-    /// A title and text, with no buttons and the default visibility.
-    pub fn new(title: impl Into<String>, text: impl Into<String>) -> Self {
-        Self {
-            title: title.into(),
-            text: text.into(),
-            ..Self::default()
-        }
-    }
-}
-
-/// One of the app's own notification buttons. A tap arrives as
-/// `ServiceEvent::Action(id)`.
-#[derive(Clone, Debug, PartialEq)]
-#[non_exhaustive]
-pub struct NotificationAction {
-    /// The app's own id, returned on a tap. Not empty, and not starting
-    /// with `libmobile.` (reserved for the built-in controls).
-    pub id: String,
-    pub label: String,
-    /// Also bring the activity forward on a tap.
-    pub opens_app: bool,
-}
-
-impl NotificationAction {
-    /// A button that does not open the app.
-    pub fn new(id: impl Into<String>, label: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            label: label.into(),
-            opens_app: false,
-        }
-    }
-}
-
-/// How much of the notification shows on the lock screen
-/// (`Notification.VISIBILITY_*`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum LockScreenVisibility {
-    /// All of it.
-    Public,
-    /// Only that there is one, until the device is unlocked.
-    #[default]
-    Private,
-    /// None of it.
-    Secret,
-}
-
-impl LockScreenVisibility {
-    /// `Notification.VISIBILITY_*`.
-    #[cfg_attr(not(target_os = "android"), allow(dead_code))] // Used by the Android bridge.
-    pub(crate) fn code(self) -> i32 {
-        match self {
-            LockScreenVisibility::Public => 1,
-            LockScreenVisibility::Private => 0,
-            LockScreenVisibility::Secret => -1,
-        }
-    }
-}
 
 /// How the service starts.
 #[derive(Clone, Debug, PartialEq)]
@@ -256,7 +183,8 @@ impl fmt::Display for ServiceError {
 impl std::error::Error for ServiceError {}
 
 /// The checks Rust makes before asking Android: the button count with
-/// `builtin` buttons from the controls, and the action ids.
+/// `builtin` buttons from the controls, the action ids, and the tag's
+/// length (a [`ServiceError::Platform`] naming it).
 #[cfg_attr(not(target_os = "android"), allow(dead_code))] // Used by the Android bridge.
 pub(crate) fn check_content(
     content: &NotificationContent,
@@ -271,6 +199,9 @@ pub(crate) fn check_content(
     }
     if builtin + content.actions.len() > MAX_ACTIONS {
         return Err(ServiceError::TooManyActions);
+    }
+    if tag_too_long(content) {
+        return Err(ServiceError::Platform(TAG_TOO_LONG.into()));
     }
     Ok(())
 }
@@ -311,6 +242,18 @@ mod tests {
             );
         }
         assert!(check_content(&content(&["libmobile"]), 0).is_ok());
+    }
+
+    #[test]
+    fn tags_are_at_most_256_bytes() {
+        let mut c = content(&[]);
+        c.tag = Some("a".repeat(256));
+        assert!(check_content(&c, 0).is_ok());
+        c.tag = Some("a".repeat(257));
+        assert_eq!(
+            check_content(&c, 0),
+            Err(ServiceError::Platform(TAG_TOO_LONG.into()))
+        );
     }
 
     #[test]

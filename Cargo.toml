@@ -43,6 +43,10 @@ battery = []
 # runtime (android/java/dev/highbay/libmobile/events, src/system_events.rs):
 # visibility, focus, the service, the default network and Doze.
 system-events = []
+# Alert notifications on the app's own channels, with taps reported to the
+# app (android/java/dev/highbay/libmobile/notify, src/android/notify.rs).
+# Adds POST_NOTIFICATIONS. With `system-events`, `SystemEvent::Notify`.
+notifications = []
 # `system_events::subscribe_tokio`, a tokio receiver for system events.
 tokio = ["system-events", "dep:tokio"]
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and

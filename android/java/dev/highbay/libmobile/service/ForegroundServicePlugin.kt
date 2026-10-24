@@ -73,6 +73,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
         val labels: Array<String>,
         val opens: Int,
         val visibility: Int,
+        val tag: String?,
     )
 
     /** Exit, acquire, release, held suffix. */
@@ -86,7 +87,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
 
     /** Guards everything below. */
     private val lock = Any()
-    private var content = Content("", "", emptyArray(), emptyArray(), 0, Notification.VISIBILITY_PRIVATE)
+    private var content = Content("", "", emptyArray(), emptyArray(), 0, Notification.VISIBILITY_PRIVATE, null)
     private var controls = Controls(0, false, false, false, arrayOf("", "", "", ""))
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -135,6 +136,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
         labels: Array<String>,
         opens: Int,
         visibility: Int,
+        tag: String?,
         ongoing: Boolean,
         exit: Boolean,
         wakeLockToggle: Boolean,
@@ -158,7 +160,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
             return "missing-permission: ${Manifest.permission.RECORD_AUDIO}"
         }
         synchronized(lock) {
-            content = Content(title, text, ids, labels, opens, visibility)
+            content = Content(title, text, ids, labels, opens, visibility, tag)
             controls = Controls(types, ongoing, exit, wakeLockToggle, controlLabels)
             ensureChannel(app)
             try {
@@ -186,9 +188,10 @@ object ForegroundServicePlugin : MobileActivityPlugin {
         labels: Array<String>,
         opens: Int,
         visibility: Int,
+        tag: String?,
     ): String? = synchronized(lock) {
         if (!running) return "not-running"
-        content = Content(title, text, ids, labels, opens, visibility)
+        content = Content(title, text, ids, labels, opens, visibility, tag)
         post(context.applicationContext)
         null
     }
@@ -198,7 +201,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
     fun updateText(context: Context, text: String): String? = synchronized(lock) {
         if (!running) return "not-running"
         val c = content
-        content = Content(c.title, text, c.ids, c.labels, c.opens, c.visibility)
+        content = Content(c.title, text, c.ids, c.labels, c.opens, c.visibility, c.tag)
         post(context.applicationContext)
         null
     }
@@ -376,7 +379,7 @@ object ForegroundServicePlugin : MobileActivityPlugin {
             .setShowWhen(false)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setVisibility(c.visibility)
-            .setContentIntent(openApp(context, null, REQUEST_OPEN))
+            .setContentIntent(openBody(context, c.tag))
         if (Build.VERSION.SDK_INT >= 31) {
             builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         }
@@ -410,15 +413,34 @@ object ForegroundServicePlugin : MobileActivityPlugin {
         )
     }
 
-    /** The app's launch activity; with [id], delivered to the running one as an action tap. */
-    private fun openApp(context: Context, id: String?, request: Int): PendingIntent {
+    /**
+     * The body's tap: the app's launch activity, delivered to the running
+     * one, with the extras `bridge.IntentPlugin` turns into
+     * `ServiceEvent::Tapped` (keep in step with `crate::intent::tap_extras`).
+     */
+    private fun openBody(context: Context, tag: String?): PendingIntent {
+        val intent = launchIntent(context)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra("libmobile.notification", CHANNEL)
+            .putExtra("libmobile.kind", "service")
+        if (tag != null) intent.putExtra("libmobile.tag", tag)
+        return PendingIntent.getActivity(
+            context, REQUEST_OPEN, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    private fun launchIntent(context: Context): Intent {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: Intent().setPackage(context.packageName)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (id != null) {
-            intent.putExtra(EXTRA_ACTION_ID, id)
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
+        return intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    /** The app's launch activity, delivered to the running one as the tap on button [id]. */
+    private fun openApp(context: Context, id: String, request: Int): PendingIntent {
+        val intent = launchIntent(context)
+            .putExtra(EXTRA_ACTION_ID, id)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         return PendingIntent.getActivity(
             context, request, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

@@ -1,7 +1,7 @@
 ---
 title: Alert notifications, tap tags, and updating the ongoing notification
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "Feature `notifications`: `android::notify::{post, cancel, cancel_all}`
     for alert notifications on the app's own channels, separate from the
@@ -174,3 +174,7 @@ notification's tap is a `ServiceEvent::Tapped` and alerts' taps a
 `NotifyEvent`; `post` takes the channel each time, created on first use;
 libmorph adds the `on_notify` hook. The status stays `Draft` until the
 first commit that implements it.
+
+## Amendment — 2026-10-24 15:46 EDT: implementation has started; the document is now immutable
+
+Step 1 (tags and alerts) is the first implementing commit.

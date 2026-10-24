@@ -13,17 +13,33 @@ import dev.highbay.libmobile.NativeLib
  * `MobileEvent::Intent` (`src/android/intent.rs`). Rust decides what any of
  * it means — `adb shell am start -n <pkg>/<activity> --es cmd refresh`
  * arrives with extra `cmd = "refresh"`.
+ *
+ * A tap on a notification libmobile posted (the foreground service's, or
+ * an alert) carries the extras below instead; it reaches Rust through
+ * [nativeNotificationTap] as `ServiceEvent::Tapped` or a `NotifyEvent`, not
+ * as an intent. Keep the names in step with `crate::intent::tap_extras`.
  */
 object IntentPlugin : MobileActivityPlugin {
+    private const val EXTRA_NOTIFICATION = "libmobile.notification"
+    private const val EXTRA_KIND = "libmobile.kind"
+    private const val EXTRA_TAG = "libmobile.tag"
+    private const val EXTRA_ACTION = "libmobile.action"
+
     override fun onCreate(activity: Activity, savedInstanceState: Bundle?) {
-        activity.intent?.let { deliver(it, isNew = false) }
+        activity.intent?.let { deliver(it, isNew = false, restored = savedInstanceState != null) }
     }
 
     override fun onNewIntent(activity: Activity, intent: Intent) {
-        deliver(intent, isNew = true)
+        deliver(intent, isNew = true, restored = false)
     }
 
-    private fun deliver(intent: Intent, isNew: Boolean) {
+    private fun deliver(intent: Intent, isNew: Boolean, restored: Boolean) {
+        if (intent.hasExtra(EXTRA_NOTIFICATION)) {
+            // A recreated activity gets the same intent again: the tap was
+            // delivered the first time.
+            if (!restored) deliverTap(intent)
+            return
+        }
         val extras = intent.extras
         val keys = extras?.keySet()?.toTypedArray() ?: emptyArray()
         // Every extra stringified, so `--ei` and `--ez` arrive too.
@@ -35,6 +51,24 @@ object IntentPlugin : MobileActivityPlugin {
             Log.e(NativeLib.TAG, "intent: native callback unavailable", e)
         }
     }
+
+    private fun deliverTap(intent: Intent) {
+        val id = intent.getStringExtra(EXTRA_NOTIFICATION) ?: ""
+        val kind = intent.getStringExtra(EXTRA_KIND)
+        val tag = intent.getStringExtra(EXTRA_TAG)
+        val action = intent.getStringExtra(EXTRA_ACTION)
+        try {
+            nativeNotificationTap(kind, id, tag, action)
+        } catch (e: UnsatisfiedLinkError) {
+            Log.e(NativeLib.TAG, "intent: native callback unavailable", e)
+        }
+    }
+
+    /**
+     * Implemented in Rust (`src/android/intent.rs`) as
+     * `Java_dev_highbay_libmobile_bridge_IntentPlugin_nativeNotificationTap`.
+     */
+    private external fun nativeNotificationTap(kind: String?, id: String, tag: String?, action: String?)
 
     /**
      * Implemented in Rust (`src/android/intent.rs`) as

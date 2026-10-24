@@ -1,6 +1,8 @@
 package dev.highbay.libmobile
 
 import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
 
@@ -28,7 +30,22 @@ object NativeLib {
 
     fun ensureLoaded(activity: Activity) {
         if (loaded) return
-        val name = libName(activity)
+        load(libName(activity, activity.componentName))
+    }
+
+    /**
+     * Without an activity, for a receiver in a process no activity has
+     * started yet: the name comes from the launch activity's meta-data.
+     */
+    fun ensureLoaded(context: Context) {
+        if (loaded) return
+        val component = context.packageManager.getLaunchIntentForPackage(context.packageName)?.component
+        load(if (component != null) libName(context, component) else "main")
+    }
+
+    @Synchronized
+    private fun load(name: String) {
+        if (loaded) return
         try {
             System.loadLibrary(name)
             loaded = true
@@ -37,11 +54,11 @@ object NativeLib {
         }
     }
 
-    private fun libName(activity: Activity): String {
+    private fun libName(context: Context, component: ComponentName): String {
         return try {
             @Suppress("DEPRECATION")
-            val info = activity.packageManager.getActivityInfo(
-                activity.componentName,
+            val info = context.packageManager.getActivityInfo(
+                component,
                 PackageManager.GET_META_DATA,
             )
             info.metaData?.getString(META_LIB_NAME) ?: "main"

@@ -2,7 +2,8 @@
 //!
 //! [`ServiceEvent`] reports the foreground service (feature
 //! `foreground-service`): it arrives on the main loop as
-//! `MobileEvent::Service`.
+//! `MobileEvent::Service`. Taps on alerts (feature `notifications`) arrive
+//! there as `MobileEvent::Notify`.
 //!
 //! With the feature `system-events`, any thread can follow what happens to
 //! the app without the main loop and without an async runtime:
@@ -52,6 +53,9 @@ pub enum ServiceEvent {
     NotificationHidden,
     /// The app's own button, by id.
     Action(String),
+    /// The notification's body was tapped, opening the app, with the
+    /// tag (`NotificationContent::tag`) of the latest `start` or `update`.
+    Tapped(Option<String>),
     /// The Exit button: the service has stopped and the activity's task is
     /// finishing. The app's threads should end.
     Exited,
@@ -121,6 +125,11 @@ mod subscribers {
         /// (`ComponentCallbacks2.onTrimMemory`); also `MobileEvent::TrimMemory`
         /// on the main loop. An event, not a state: [`current`] does not keep it.
         TrimMemory(TrimLevel),
+        /// An alert was tapped (feature `notifications`); also
+        /// `MobileEvent::Notify` on the main loop. An event, not a state:
+        /// [`current`] does not keep it.
+        #[cfg(feature = "notifications")]
+        Notify(crate::notify::NotifyEvent),
     }
 
     /// The default network.
@@ -209,6 +218,8 @@ mod subscribers {
                 #[cfg(feature = "battery")]
                 SystemEvent::BatteryExemption(v) => self.battery_exemption = Some(*v),
                 SystemEvent::TrimMemory(_) => {}
+                #[cfg(feature = "notifications")]
+                SystemEvent::Notify(_) => {}
             }
         }
     }
@@ -425,6 +436,21 @@ mod subscribers {
                 events.try_next(),
                 Some(SystemEvent::TrimMemory(TrimLevel::Background))
             );
+            assert_eq!(current(), before);
+        }
+
+        #[cfg(feature = "notifications")]
+        #[test]
+        fn notify_reaches_subscribers_and_is_not_kept() {
+            let _turn = lock(&TURN);
+            let events = subscribe();
+            let before = current();
+            let tap = crate::notify::NotifyEvent::Tapped {
+                id: "a".into(),
+                tag: Some("t".into()),
+            };
+            publish(SystemEvent::Notify(tap.clone()));
+            assert_eq!(events.try_next(), Some(SystemEvent::Notify(tap)));
             assert_eq!(current(), before);
         }
 

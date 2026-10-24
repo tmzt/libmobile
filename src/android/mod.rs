@@ -8,7 +8,7 @@
 //!    returns, because `AndroidApp::native_window()` takes the same internal
 //!    lock the poll callback holds);
 //! 2. drains the Kotlin bridges' mailboxes — insets, intents, IME text, and
-//!    permission answers, memory-trim levels, service events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
+//!    permission answers, memory-trim levels, service and alert events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
 //!    lands in the same tick as a rotation is resolved against the new insets;
 //! 3. pumps input events to [`MobileApp::input`];
 //! 4. calls [`MobileApp::tick`], where the app drains its own
@@ -33,6 +33,10 @@ mod insets;
 mod intent;
 mod jni_util;
 pub mod link;
+#[cfg(any(feature = "foreground-service", feature = "notifications"))]
+mod notification;
+#[cfg(feature = "notifications")]
+pub mod notify;
 mod permission;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]
@@ -193,6 +197,10 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for event in service::take_events() {
         handler.event(app, MobileEvent::Service(event));
     }
+    #[cfg(feature = "notifications")]
+    for event in notify::take_events() {
+        handler.event(app, MobileEvent::Notify(event));
+    }
 }
 
 /// Drain every pending input event. Called every iteration: android-activity
@@ -223,4 +231,6 @@ fn discard_stale_commands() {
     let _ = permission::take_results();
     #[cfg(feature = "foreground-service")]
     let _ = service::take_events();
+    #[cfg(feature = "notifications")]
+    let _ = notify::take_events();
 }

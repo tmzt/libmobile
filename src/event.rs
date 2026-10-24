@@ -153,7 +153,9 @@ pub enum MobileEvent {
     TrimMemory(TrimLevel),
     /// System bars / cutout / IME moved. Only the newest report per tick.
     Insets(Insets),
-    /// The launch intent, or a later one via `onNewIntent`.
+    /// The launch intent, or a later one via `onNewIntent`. A tap on a
+    /// notification libmobile posted arrives as `Service` or `Notify`
+    /// instead.
     Intent(IntentData),
     /// The hidden `InputConnection` field's full text after an IME edit.
     TextChanged(String),
@@ -166,6 +168,10 @@ pub enum MobileEvent {
     /// subscribers under `system-events`.
     #[cfg(feature = "foreground-service")]
     Service(crate::system_events::ServiceEvent),
+    /// An alert was tapped (`android::notify`). Also delivered to
+    /// system-event subscribers under `system-events`.
+    #[cfg(feature = "notifications")]
+    Notify(crate::notify::NotifyEvent),
     /// The user answered a
     /// [`request_permissions`](crate::android::request_permissions) call.
     Permissions(PermissionsOutcome),

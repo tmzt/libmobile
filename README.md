@@ -60,6 +60,7 @@ examples/
 | `foreground-service` | `service/ForegroundServicePlugin` | `android::service`; `MobileEvent::Service` |
 | `battery`     | `battery/BatteryPlugin`    | `android::battery`; a `<queries>` entry for Samsung's Device Care; with `system-events`, `SystemEvent::BatteryExemption` |
 | `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
+| `notifications` | `notify/NotifyPlugin`    | `android::notify` (alerts on the app's own channels); `MobileEvent::Notify`; `POST_NOTIFICATIONS`; with `system-events`, `SystemEvent::Notify` |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 | `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
@@ -228,6 +229,38 @@ service::update_text("3 messages")?;
 Button taps, Exit and the service's own changes arrive as
 `MobileEvent::Service(ServiceEvent::…)`. Exit stops the service, delivers
 `Exited` and finishes the activity; the app's threads end themselves.
+
+`update` (title, text, buttons and tag) and `update_text` work from any
+thread while the service runs, also with the activity stopped and no
+frames drawn; each is posted at once, without sound or heads-up. A tap on
+the notification's body opens the app and arrives as
+`ServiceEvent::Tapped(tag)`, with `NotificationContent::tag` from the
+latest `start` or `update`.
+
+### Alert notifications
+
+With the `notifications` feature, `android::notify` posts dismissable
+alerts on the app's own channels, apart from the service's, from any
+thread. The app asks for `POST_NOTIFICATIONS` itself; without it `post`
+gives `NotifyError::PermissionDenied`.
+
+```rust
+use libmobile::android::notify::{self, Channel, Importance, NotificationAction, NotificationContent};
+
+let channel = Channel::new("questions", "Questions", Importance::High);
+let mut content = NotificationContent::new("Agent 3", "needs an approval");
+content.tag = Some("agent-3".into()); // returned on a tap, at most 256 bytes
+content.actions.push(NotificationAction::new("approve", "Approve"));
+notify::post("agent-3", &content, &channel)?; // the same id replaces it
+notify::cancel("agent-3")?;
+```
+
+The channel is created on its first post, and Android keeps its
+importance and sound from then on: a different importance needs a new
+channel id. A tap on the body opens the app, removes the alert and arrives
+as `MobileEvent::Notify(NotifyEvent::Tapped { id, tag })`, also when it
+starts the app; a button arrives as `NotifyEvent::Action { id, action }`.
+`cancel_all()` removes the app's alerts, not the service's notification.
 
 ### Battery optimization
 

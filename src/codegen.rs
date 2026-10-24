@@ -208,6 +208,21 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
+    // Alert notifications on the app's own channels (`notify/`,
+    // `src/android/notify.rs`); the receiver takes the buttons that do not
+    // open the app.
+    Plugin {
+        feature: Some("notifications"),
+        dir: "notify",
+        class: "notify.NotifyPlugin",
+        contributes: Contributes {
+            permissions: &["android.permission.POST_NOTIFICATIONS"],
+            application: &[
+                "<receiver android:name=\"dev.highbay.libmobile.notify.NotifyActionReceiver\" android:exported=\"false\" />",
+            ],
+            ..Contributes::NOTHING
+        },
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -1006,6 +1021,7 @@ mod tests {
                 "foreground-service",
                 "battery",
                 "system-events",
+                "notifications",
                 "secure-store-no-strongbox"
             ]
         );
@@ -1095,6 +1111,21 @@ mod tests {
             merge(&active).permissions,
             ["android.permission.ACCESS_NETWORK_STATE"]
         );
+    }
+
+    #[test]
+    fn notify_plugin_posts_and_receives_buttons() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "notify"));
+        let active = active_plugins(&["notifications"]);
+        assert!(active.iter().any(|p| p.class == "notify.NotifyPlugin"));
+        let merged = merge(&active);
+        assert_eq!(
+            merged.permissions,
+            ["android.permission.POST_NOTIFICATIONS"]
+        );
+        assert_eq!(merged.application.len(), 1);
+        assert!(merged.application[0].contains("notify.NotifyActionReceiver"));
+        assert!(merged.application[0].contains("android:exported=\"false\""));
     }
 
     #[test]
