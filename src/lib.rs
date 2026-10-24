@@ -16,7 +16,7 @@
 //!   writes `GeneratedPlugins.kt`, and writes `libmobile.gradle`, which appends
 //!   the staged root to Gradle's `sourceSets` and applies the plugins'
 //!   contributions (AARs, permissions, manifest elements). See [`codegen`].
-//! * **Rust**: platform-free types ([`insets`], [`intent`], [`event`],
+//! * **Rust**: platform-free types ([`insets`], [`intent`], [`link`], [`event`],
 //!   [`worker`], [`mailbox`]) that build and test on any host, and the
 //!   `android` module (target_os = "android") with the JNI bridges and
 //!   [`android::run`].
@@ -72,6 +72,7 @@ pub mod gradle;
 pub mod insets;
 pub mod intent;
 pub mod key_store;
+pub mod link;
 pub mod mailbox;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]

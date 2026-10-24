@@ -30,6 +30,7 @@ pub mod camera;
 mod insets;
 mod intent;
 mod jni_util;
+pub mod link;
 mod permission;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]

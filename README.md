@@ -53,7 +53,7 @@ examples/
 
 | Feature       | Kotlin plugin              | Adds                                                        |
 |---------------|----------------------------|-------------------------------------------------------------|
-| _(always)_    | `bridge/*`                 | insets, intents, and text input                             |
+| _(always)_    | `bridge/*`                 | insets, intents, text input, and opening links              |
 | `google-auth` | `auth/GoogleAuthPlugin`    | `androidx.credentials` and `googleid` AARs; `MobileEvent::GoogleLogin` |
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
 | `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
@@ -220,6 +220,27 @@ the answer: with `system-events`, `SystemEvent::BatteryExemption(bool)`
 arrives when the exemption has changed, checked each time the app becomes
 visible or focused.
 
+### Opening a link
+
+`android::link::open_link` asks Android to open an http or https link in
+the app that handles it, normally the browser. Any thread, while the app is
+visible:
+
+```rust
+use libmobile::android::link::{self, OpenLinkError};
+
+match link::open_link("https://example.com/a?k=v") {
+    Ok(()) => {}                           // sent; it does not wait for the browser
+    Err(OpenLinkError::NoHandler) => {}    // no app takes it
+    Err(OpenLinkError::NotVisible) => {}   // the app is hidden
+    Err(err) => log::warn!("{err}"),       // BadUrl: not http or https
+}
+```
+
+Other schemes (`file:`, `intent:`, `mailto:` and the rest) are refused.
+`link::check_link` makes the same check without opening anything. The link
+is logged at debug level without its query or fragment.
+
 ### System events
 
 With the `system-events` feature, any thread can follow what happens to the
@@ -341,6 +362,10 @@ copying is the surface lifecycle:
 - `WindowCreated` builds a swapchain from `SurfaceTarget`;
 - `WindowDestroyed` drops it synchronously, inside the poll callback, before
   Android takes the window back.
+
+A tap, or `--es cmd open-link`, opens `https://example.com/a?k=secret`
+in the browser; `--es cmd open-link-later` tries again from a thread after
+5 s, so a call while the app is hidden can be tried after Home.
 
 ## Development
 
