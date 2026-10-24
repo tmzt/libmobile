@@ -756,3 +756,50 @@ Proposed only; nothing is implemented until the owner approves.
 Plan: `docs/design/20261024_04_NOTIFICATIONS_PLAN.md` (Draft, approved).
 The owner approved the notification plans in libmobile and libmorph
 ("approve both"), with the recommended answers.
+
+## 2026-10-24 14:29 EDT — App icons step 1 built; step 2 on the S23 partly checked
+
+Plan: `docs/design/20261024_03_APP_ICON_PLAN.md` (now In implementation),
+step 1 (`1ed44b3` library and README, `2acdfc6` example).
+
+Small departure (step 1): the rasters (`icon_images`) are in a private
+`icon` module, not `codegen`, because `build.rs` compiles
+`src/codegen.rs` directly and has no `image` there.
+`codegen::adaptive_icon_xml` is in `codegen` as planned. Both are
+crate-private: the public API is only the `icons` feature, `gradle::Icon`
+and `Project::icon`, as step 3 says. Generated icon files that a later
+build no longer makes are removed from the generated project.
+
+Step 1, passed:
+- `cargo fmt --all -- --check`; host `cargo clippy --workspace
+  --all-targets` with no features, `--features=icons` and
+  `--all-features`; `cargo clippy --target aarch64-linux-android
+  --workspace --all-targets` with no features and `--all-features`: no
+  warnings. `cargo test --workspace` (and with `--features icons`),
+  `cargo test -p libmobile --features icons` (100 lib tests) and
+  `--all-features` (131): all pass.
+- `cargo tree --target aarch64-linux-android -p libmobile-example-wgpu -e
+  normal,build -i image`: `image` only under `[build-dependencies]`.
+- `examples/build.sh wgpu` built the APK. `aapt dump badging`
+  (build-tools 36.0.0):
+  `application-icon-160`, `-240`, `-320`, `-480`, `-640` and
+  `-65534:'res/mipmap-anydpi-v26/ic_launcher.xml'`;
+  `application: label='libmobile wgpu' icon='res/mipmap-anydpi-v26/ic_launcher.xml'`.
+  `aapt2 dump resources`: `color/ic_launcher_background`,
+  `mipmap/ic_launcher` (0x7f020000), `_foreground`, `_monochrome`,
+  `_round`.
+- The generated xxxhdpi files, looked at over a checkerboard: the legacy
+  icon is the disc over #20242C with rounded, transparent corners; the
+  round one is the same in a circle; the foreground and the white
+  monochrome layer sit in the centre of the transparent 432 px canvas.
+
+Step 2 on the S23 (`timothys-s23-ultra:5555`, API 36):
+- Installed (`adb install -r`: Success). `cmd package resolve-activity
+  -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`
+  gives `nonLocalizedLabel=libmobile wgpu icon=0x7f020000`, the APK's
+  `mipmap/ic_launcher`.
+- Not checked: the launcher. The owner had Termux in front with the screen
+  on from 14:10 to 14:29, so no screenshot was taken and the app was not
+  started. The launcher icon under One UI's mask, themed icons and the app
+  info page need the owner.
+- The example was force-stopped afterwards (no pid).
