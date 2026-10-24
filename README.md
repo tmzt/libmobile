@@ -53,7 +53,7 @@ examples/
 
 | Feature       | Kotlin plugin              | Adds                                                        |
 |---------------|----------------------------|-------------------------------------------------------------|
-| _(always)_    | `bridge/*`                 | insets, intents, text input, and opening links              |
+| _(always)_    | `bridge/*`                 | insets, intents, text input, opening links, and app directories |
 | `google-auth` | `auth/GoogleAuthPlugin`    | `androidx.credentials` and `googleid` AARs; `MobileEvent::GoogleLogin` |
 | `camera`      | `camera/CameraPlugin`      | an `IMAGE_CAPTURE` `<queries>` entry; `MobileEvent::Capture` |
 | `cpal`        | none                       | cpal (AAudio), re-exported as `libmobile::android::cpal`    |
@@ -240,6 +240,23 @@ match link::open_link("https://example.com/a?k=v") {
 Other schemes (`file:`, `intent:`, `mailto:` and the rest) are refused.
 `link::check_link` makes the same check without opening anything. The link
 is logged at debug level without its query or fragment.
+
+### App directories
+
+`android::dirs::files_dir()` and `cache_dir()` give the app's private
+directories (`Context.getFilesDir()` and `getCacheDir()`) from any thread,
+with no `AndroidApp`. The files directory is kept until the app is
+uninstalled or its data cleared, and is the same as
+`AndroidApp::internal_data_path()`; Android may delete the cache
+directory's files when storage is low. Both exist when returned. `None`
+only if the JNI call fails, which is logged.
+
+```rust
+use libmobile::android::dirs;
+
+let files = dirs::files_dir();   // Some("/data/user/0/<package>/files")
+let cache = dirs::cache_dir();   // Some("/data/user/0/<package>/cache")
+```
 
 ### System events
 

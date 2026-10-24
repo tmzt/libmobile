@@ -27,6 +27,7 @@ pub mod auth;
 pub mod battery;
 #[cfg(feature = "camera")]
 pub mod camera;
+pub mod dirs;
 mod insets;
 mod intent;
 mod jni_util;
