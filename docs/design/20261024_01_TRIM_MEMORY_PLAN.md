@@ -1,7 +1,7 @@
 ---
 title: Android's memory-trim levels
 date: 2026-10-24
-status: In implementation
+status: Implemented
 covers:
   - "`MobileEvent::TrimMemory(TrimLevel)`, from
     `ComponentCallbacks2.onTrimMemory`"
@@ -73,3 +73,16 @@ status stays `Draft` until the first commit that implements it.
 ## Amendment — 2026-10-24 13:11 EDT: implementation has started; the document is now immutable
 
 Step 1 starts with this commit.
+
+## Amendment — 2026-10-24 13:32 EDT: implemented
+
+Every step is done:
+1. `be395e2`, `60f34d3` (the `wgpu` example) and `fe57842` (README),
+   with `806cb05` (CHANGES: choices) and `8a2b041` (CHANGES: the S23).
+   `am send-trim-memory` names the UI-hidden level `HIDDEN`, not
+   `UI_HIDDEN` as step 1 wrote it; `HIDDEN` and `BACKGROUND` (with the
+   app hidden) arrived as `UiHidden` and `Background`, and Home sent
+   `UiHidden` by itself. API 36 also delivered `RUNNING_CRITICAL`, so
+   the sources' "only `UI_HIDDEN` and `BACKGROUND` from API 34" is not
+   strictly true for levels `am` sends.
+2. libmobile 0.2.4 (`27f3f74`, tag `v0.2.4`), on the owner's word.

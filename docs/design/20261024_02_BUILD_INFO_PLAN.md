@@ -1,7 +1,7 @@
 ---
 title: The device's vendor, make and model
 date: 2026-10-24
-status: In implementation
+status: Implemented
 covers:
   - "`android::build_info() -> BuildInfo { manufacturer, brand, model }`,
     from `android.os.Build`, and nothing that identifies the person or the
@@ -79,3 +79,12 @@ status stays `Draft` until the first commit that implements it.
 ## Amendment — 2026-10-24 13:08 EDT: implementation has started; the document is now immutable
 
 Step 1 starts with this commit.
+
+## Amendment — 2026-10-24 13:32 EDT: implemented
+
+Every step is done:
+1. `0586bec`, `2df80ad` (the `wgpu` example) and `ded93e9` (README),
+   with `806cb05` (CHANGES: choices) and `8a2b041` (CHANGES: the S23,
+   where it logged `samsung`, `samsung`, `SM-S918U`, matching
+   `getprop`).
+2. libmobile 0.2.4 (`27f3f74`, tag `v0.2.4`), on the owner's word.
