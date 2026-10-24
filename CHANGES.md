@@ -586,3 +586,18 @@ Passed:
 `codegen::PLUGINS` as a core plugin like `LinkPlugin`, so it is in every
 build. The example was force-stopped afterwards. Step 2 (release) waits
 for the owner.
+
+## 2026-10-23 23:36 EDT — Departures and constructors approved
+
+The owner approved them (2026-10-23: "approve, bump versions if needed and
+release"):
+- `docs/design/20261023_01_FOREGROUND_SERVICE_PLAN.md`: the constructors
+  `ServiceOptions::new`, `NotificationAction::new` and
+  `NotificationContent::new`, and the other departures of entry 9b4ca69.
+- `docs/design/20261023_02_BATTERY_EXEMPTION_PLAN.md`: re-reading the
+  exemption on `Focused(true)` as well, and the visibility rule, Device
+  Care `<queries>` entry (entry 9c2a646).
+- `docs/design/20261023_03_OPEN_LINK_PLAN.md`: links opened from a thread
+  other than the UI thread start from the Application context in a new
+  task (entry 9c2a646). Apps answering an intent while hidden wait for
+  `Resume` before `open_link`; that is documented, not changed.
