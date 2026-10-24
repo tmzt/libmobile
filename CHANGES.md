@@ -967,3 +967,9 @@ with recent touches, and switching night mode or the navigation mode
 changes what the owner sees. Night mode (`yes`) and the navigation mode
 (`0`, 3-button) were read and left unchanged. The example was
 force-stopped.
+
+## 2026-10-24 16:22 EDT — Released libmobile 0.2.6
+
+On the owner's word ("approve, yes"): libmobile 0.2.6 (`f7954ed`, tag
+`v0.2.6`) with alert notifications, tap tags, night mode and the bar
+icons. Both plans stay In implementation until their S23 checks pass.
