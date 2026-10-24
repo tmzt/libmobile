@@ -154,3 +154,26 @@ commit is the one tagged `v0.2.5`.
   adaptive and monochrome mipmaps and set `android:icon` and
   `android:roundIcon`. It adds `image` 0.25 (PNG only) as a
   build-dependency of apps that use it.
+
+## 0.2.6 — 2026-10-24 (tag `v0.2.6`)
+
+Alert notifications and tap tags (`docs/design/20261024_04_NOTIFICATIONS_PLAN.md`)
+and the system's night mode with the system bars' icons
+(`docs/design/20261024_05_NIGHT_MODE_PLAN.md`). All additions;
+`MobileEvent`, `SystemEvent`, `ServiceEvent` and `NotificationContent` are
+`#[non_exhaustive]`. The commit is the one tagged `v0.2.6`.
+
+- **Feature `notifications`:** `android::notify::{post, cancel,
+  cancel_all}` with `Channel` (and `new`), `Importance`, `NotifyError`
+  and `NotifyEvent` (`Tapped { id, tag }`, `Action { id, action }`);
+  `MobileEvent::Notify` and, with `system-events`, `SystemEvent::Notify`.
+  It adds `POST_NOTIFICATIONS` and a non-exported receiver for alert
+  buttons to the manifest.
+- **`NotificationContent::tag: Option<String>`**, and
+  `ServiceEvent::Tapped(Option<String>)` for the ongoing notification's
+  body. `service::update` and `update_text` are documented to work from
+  any thread while the activity is stopped (`setOnlyAlertOnce`).
+- **Core:** `android::night_mode(&AndroidApp) -> Option<bool>` and
+  `android::set_system_bar_icons(status_dark, navigation_dark)`; the first
+  call also turns off the bars' contrast scrims and makes their colours
+  transparent.
