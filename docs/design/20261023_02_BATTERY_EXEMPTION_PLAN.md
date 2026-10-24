@@ -233,3 +233,16 @@ foreground service plan or a plan of its own, once this one is approved.
 3. **Samsung's internal page.** Best-effort by component name, falling
    back to the app's settings page, as section 3 says. Recommended: yes;
    the fallback is one tap away from the same setting.
+
+## Amendment — 2026-10-23 22:02 EDT: approved
+
+The owner approved this plan on 2026-10-23 ("approve plans"), without
+separate answers to section 7, so its recommendations stand:
+1. `android::battery` moves to the feature `battery`, out of the
+   foreground service plan's section 5; that plan gets an amendment
+   saying so.
+2. It ships with the foreground service in libmobile 0.2.3.
+3. Samsung's battery page is opened best-effort by component name,
+   falling back to the app's settings page.
+
+The status stays `Draft` until the first commit that implements it.
