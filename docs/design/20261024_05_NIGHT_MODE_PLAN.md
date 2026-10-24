@@ -96,3 +96,14 @@ commit that implements it.
 ## Amendment — 2026-10-24 15:53 EDT: implementation has started; the document is now immutable
 
 Step 1 (the call, and the system bars' icons) is the first implementing commit.
+
+## Amendment — 2026-10-24 16:22 EDT: released in 0.2.6; step 1's device checks still open
+
+Step 1 is `20f5083` and `45097f7`, with CHANGES `1a3e6c5`. The scrims
+are turned off and the bars made transparent from the first
+`set_system_bar_icons` call rather than at start, so apps that never
+call it are unchanged (a reading of the amendment, kept unless the owner
+says otherwise). Step 2 is libmobile 0.2.6 (`f7954ed`, tag `v0.2.6`),
+released on the owner's word before step 1's S23 checks, which need the
+phone idle or the owner. The status stays `In implementation` until they
+pass.

@@ -178,3 +178,13 @@ first commit that implements it.
 ## Amendment — 2026-10-24 15:46 EDT: implementation has started; the document is now immutable
 
 Step 1 (tags and alerts) is the first implementing commit.
+
+## Amendment — 2026-10-24 16:22 EDT: released in 0.2.6; step 3 still open
+
+Steps 1 and 2 are `6e83eef`, `bf0c356` and `d1676ad`, with departures in
+CHANGES `b1f78b3`. Step 4 is libmobile 0.2.6 (`f7954ed`, tag `v0.2.6`),
+released on the owner's word before step 3 is complete: the alert's
+channel and updates while stopped passed; the taps, replacing and
+cancelling, the cold-start tap, updates with the screen off and
+`PermissionDenied` need the phone idle or the owner. The status stays
+`In implementation` until they pass.
