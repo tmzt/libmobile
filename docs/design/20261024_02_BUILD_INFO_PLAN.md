@@ -66,3 +66,12 @@ pub fn build_info() -> Option<BuildInfo>;
    (`getprop ro.product.model` gives the value to compare).
 2. **Release** in the next libmobile release, on the owner's word.
    Additive.
+
+## Amendment — 2026-10-24 13:06 EDT: approved, for 0.2.4
+
+The owner approved this plan with libmorph's
+`docs/design/20261024_02_DEVICE_INFO_PLAN.md` on 2026-10-24 ("approve,
+plan a 0.4.0 with what we've planned"). It ships in libmobile 0.2.4, with
+the trim-memory event (`docs/design/20261024_01_TRIM_MEMORY_PLAN.md`),
+so libmorph 0.4.0 can wrap both. `build_info()` keeps its name. The
+status stays `Draft` until the first commit that implements it.
