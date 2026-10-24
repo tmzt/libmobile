@@ -819,3 +819,9 @@ Android's night mode, and libmorph offers `dark_mode()` and
 web.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-24 15:38 EDT — Dark mode approved; 0.2.6 and 0.4.3 planned
+
+Plan: `docs/design/20261024_05_NIGHT_MODE_PLAN.md` (Draft, approved), with the system bars. On the
+owner's word ("approve, yes"), the notification and dark mode plans are
+built together and released as libmobile 0.2.6 and libmorph 0.4.3.
