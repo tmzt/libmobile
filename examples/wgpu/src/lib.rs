@@ -15,7 +15,8 @@
 //!
 //! At start it logs the app's files and cache directories
 //! (`android::dirs`), and whether the files directory is
-//! `AndroidApp::internal_data_path()`.
+//! `AndroidApp::internal_data_path()`, and the device's manufacturer, brand
+//! and model (`android::build_info`).
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -33,7 +34,7 @@ mod app {
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::dirs;
     use libmobile::android::link::open_link;
-    use libmobile::android::{AndroidApp, InputStatus, MobileApp, run};
+    use libmobile::android::{AndroidApp, InputStatus, MobileApp, build_info, run};
     use std::time::{Duration, Instant};
 
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
@@ -196,6 +197,7 @@ mod app {
                 .with_tag("libmobile-wgpu"),
         );
         log_dirs(&app);
+        log::info!("wgpu example: build_info {:?}", build_info());
         run(
             app,
             WgpuApp {
