@@ -142,3 +142,15 @@ commit is the one tagged `v0.2.4`.
   ordered) and `MobileEvent::TrimMemory(TrimLevel)`, from
   `onTrimMemory`.
 - **Feature `system-events`:** `SystemEvent::TrimMemory(TrimLevel)`.
+
+## 0.2.5 — 2026-10-24 (tag `v0.2.5`)
+
+App icons (`docs/design/20261024_03_APP_ICON_PLAN.md`). All additions. The
+commit is the one tagged `v0.2.5`.
+
+- **Feature `icons`** (host-only, for build scripts): `gradle::Icon`
+  (`png`, `pngs`, `background_color`, `background_png`, `monochrome_png`,
+  `full_bleed`) and `Project::icon`, which write the launcher, round,
+  adaptive and monochrome mipmaps and set `android:icon` and
+  `android:roundIcon`. It adds `image` 0.25 (PNG only) as a
+  build-dependency of apps that use it.
