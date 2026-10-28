@@ -997,3 +997,31 @@ the media request in a new plan, we'll need it soon anyway". A
 `camera`; libmorph's companion plan of the same name wraps it.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-28 15:13 EDT — camera capture and QR plan, steps 1-4: departures
+
+Plan: docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md (with its
+2026-10-28 14:46 EDT amendment). Steps 1-4 in `de66d72`'s successor tagged
+`v0.3.0`. Not yet run on a phone; linked for aarch64 (NDK 28.1, API 29) and
+packaged with Gradle in a scratch app.
+
+1. **Preview frames** are `latest_preview(SessionId) ->
+   Option<Arc<PreviewFrame>>` with I420 planes for the wgpu viewfinder, not
+   the body's Gray8/Rgba8 `Frame`; with `upright: false` the planes are
+   unrotated and `quarter_turns` is left to the shader.
+2. **Modules** are `src/camera*` and `src/android/camera/` (the body's
+   `camera_device`); the gate's pure logic is `src/camera/gate.rs`.
+3. **Kotlin:** `CameraPlugin.displayInfo(activity) -> [rotation, width,
+   height]` instead of `displayRotation` (the display's aspect picks the
+   analysis size, 5.2).
+4. **Raw `ndk-sys` bindings** rather than `ndk/media`, so image-reader
+   listeners carry an integer context, not a boxed closure; one
+   module-level `#![allow(unsafe_code)]` in `src/android/camera/ndk.rs`.
+5. **Captures** are served one at a time, oldest first; a Gray8/Rgba8
+   capture from a running preview is scaled down by a whole factor; a zoom
+   set before `Opened` is applied on opening; `Jpeg` frames report the
+   `AImage` size even with `JPEG_ORIENTATION` set (risk in section 10).
+6. **A camera event in flight** when the activity is destroyed could reach
+   the next `android_main` run (minor).
+7. **The README** (step 7) is not yet updated for the rename; `src/gradle.rs`
+   docs still say `features = ["camera"]`, now the in-process camera.
