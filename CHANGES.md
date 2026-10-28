@@ -1025,3 +1025,27 @@ packaged with Gradle in a scratch app.
    the next `android_main` run (minor).
 7. **The README** (step 7) is not yet updated for the rename; `src/gradle.rs`
    docs still say `features = ["camera"]`, now the in-process camera.
+
+## 2026-10-28 15:34 EDT — camera capture and QR plan, step 5: departures
+
+Plan: docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md. Step 5 in the
+commit tagged `v0.3.1`. Not yet run on a phone.
+
+1. rqrr 0.11 also brings `lru` 0.18 (with `hashbrown`, `foldhash`).
+2. Constants beyond section 11: `QR_ZOOM_MIN_STEP` 1.1, `QR_SAT_LEVEL` 245,
+   `QR_RETRY_MODULE_PX` 8, `QR_FINE_ZOOM_MIN` 1.02, `QR_FINE_AIM` 1.05 (the
+   fine finish lands at 4.0-4.2 px per module on API 30+; API 29 keeps the
+   coarse steps).
+3. `k_fit` is worked out per axis; the code still stays within 90%.
+4. `QR_DECODE_BUDGET_MS` is only logged; the analysis stream is not shrunk
+   to 960x540 automatically.
+5. The AF trigger is a CANCEL+START burst; loss sends a CANCEL.
+6. Each ladder rung re-meters on the code's current box; held windows at
+   the floor last `QR_AE_SETTLE_MS`; loss resets only a ladder a code
+   started, to the mode's start; AE's early settle needs AE to leave and
+   return to CONVERGED/LOCKED.
+7. Codes are reported as soon as read; in `Continuous` every distinct
+   payload in a frame is reported.
+8. `zoom_by` during auto zoom multiplies the ratio shown (user x auto),
+   then resets auto (visible to the app).
+9. The example (step 6) and the README (step 7) are not done yet.
