@@ -973,3 +973,27 @@ force-stopped.
 On the owner's word ("approve, yes"): libmobile 0.2.6 (`f7954ed`, tag
 `v0.2.6`) with alert notifications, tap tags, night mode and the bar
 icons. Both plans stay In implementation until their S23 checks pass.
+
+## 2026-10-28 13:19 EDT — Camera capture and QR scanning (proposed)
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md` (Draft).
+Requested by the owner through the flankr session: single-frame capture,
+a QR mode with auto zoom, exposure for codes on screens and zoom for a
+pinch, a Cargo feature per part, and the CAMERA permission asked for only
+when the app uses the camera. libmorph's companion plan wraps it.
+
+The README gains its `## Architectural decisions` table, which it did not
+have, with a row for every plan in `docs/design/`.
+
+Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-28 13:43 EDT — Media request: the system chooser with a camera entry (proposed)
+
+Plan: `docs/design/20261028_02_MEDIA_REQUEST_PLAN.md` (Draft). Requested
+by the owner through the flankr session: "im thinking of media-request as
+open the media selector which has a camera option", then "you can plan
+the media request in a new plan, we'll need it soon anyway". A
+`media-request` feature beside `camera-intent` and the in-process
+`camera`; libmorph's companion plan of the same name wraps it.
+
+Proposed only; nothing is implemented until the owner approves.
