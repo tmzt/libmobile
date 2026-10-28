@@ -15,6 +15,8 @@
 //!   One session at a time: a new one stops the old one first.
 //! * [`set_zoom`], [`zoom_by`], [`zoom_range`], [`zoom`]: the app drives
 //!   zoom (a pinch it recognises itself, or a slider).
+//! * `start_qr` (feature `camera-qr`): a session that reads QR codes, with
+//!   auto zoom and exposure for screens.
 //! * `capture_frame` / `cancel_capture` (feature `camera-capture`): one
 //!   still, served by a running session on the same facing without closing
 //!   it.
@@ -31,6 +33,8 @@
 //! reopens (`Opened` again); on `Destroy` everything is dropped.
 
 mod ndk;
+#[cfg(feature = "camera-qr")]
+mod qr;
 mod worker;
 
 pub use crate::camera::{
@@ -39,6 +43,8 @@ pub use crate::camera::{
 };
 #[cfg(feature = "camera-capture")]
 pub use crate::camera::{CaptureOptions, Frame, FrameFormat, Resolution};
+#[cfg(feature = "camera-qr")]
+pub use crate::camera::{QrCode, QrMode, QrOptions, ScreenExposure};
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -67,6 +73,25 @@ pub fn start_preview(app: &AndroidApp, facing: Facing, preview: PreviewOptions) 
         session,
         facing,
         preview,
+    });
+    session
+}
+
+/// Start scanning for QR codes (feature `camera-qr`): a session like
+/// [`start_preview`]'s (with preview frames when `options.preview` is set)
+/// whose frames also go to the QR decoder. `Opened`, then
+/// `CameraEvent::Qr` for each code read; with `QrMode::Once`,
+/// `Closed { reason: None }` follows the first. Asks for CAMERA first if
+/// needed. [`set_zoom`], [`zoom_by`], [`latest_preview`] and [`stop`] take
+/// the id; auto zoom works upward from the app's zoom and pauses after each
+/// call.
+#[cfg(feature = "camera-qr")]
+pub fn start_qr(app: &AndroidApp, options: &QrOptions) -> SessionId {
+    let session = SessionId(NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
+    worker::post(Msg::StartQr {
+        app: app.clone(),
+        session,
+        options: *options,
     });
     session
 }

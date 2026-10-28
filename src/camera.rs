@@ -13,6 +13,9 @@
 //!   time.
 //! * A **capture** ([`CaptureId`], feature `camera-capture`) is one still
 //!   frame, with or without a session.
+//! * A **QR session** (feature `camera-qr`, `start_qr` with [`QrOptions`])
+//!   is a session that also reads QR codes, with auto zoom and exposure for
+//!   screens; codes arrive as `CameraEvent::Qr`.
 //! * Results and state changes arrive as
 //!   [`MobileEvent::Camera`](crate::MobileEvent::Camera) ([`CameraEvent`]).
 //!
@@ -33,9 +36,13 @@ pub(crate) mod capture;
 pub(crate) mod convert;
 pub(crate) mod gate;
 pub(crate) mod geometry;
+#[cfg(feature = "camera-qr")]
+pub(crate) mod qr;
 
 #[cfg(feature = "camera-capture")]
 pub use capture::{CaptureOptions, Frame, FrameFormat, Resolution};
+#[cfg(feature = "camera-qr")]
+pub use qr::{QrCode, QrMode, QrOptions, ScreenExposure};
 
 /// Largest analysis (preview) stream: the longer side, then the shorter.
 pub(crate) const PREVIEW_MAX: (u32, u32) = (1280, 720);
@@ -59,7 +66,7 @@ pub enum Facing {
     Front,
 }
 
-/// A running camera session (a preview). Opaque; ids count from 1 per
+/// A running camera session (a preview or a QR scan). Opaque; ids count from 1 per
 /// process.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SessionId(pub(crate) u32);
@@ -176,6 +183,10 @@ pub enum CameraEvent {
         capture: CaptureId,
         result: Result<Frame, CameraError>,
     },
+    /// A QR code was read (feature `camera-qr`). With `QrMode::Once`,
+    /// `Closed { reason: None }` follows.
+    #[cfg(feature = "camera-qr")]
+    Qr { session: SessionId, code: QrCode },
 }
 
 /// How a session's preview frames are made.

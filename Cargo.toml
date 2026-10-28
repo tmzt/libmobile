@@ -1,6 +1,6 @@
 [package]
 name = "libmobile"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
@@ -42,6 +42,10 @@ camera-intent = []
 camera = ["dep:ndk-sys", "ndk-sys/media"]
 # One still frame (`android::camera::capture_frame`): Gray8, Rgba8 or Jpeg.
 camera-capture = ["camera"]
+# QR scanning (`android::camera::start_qr`): rqrr decoding on its own
+# thread, auto zoom toward a code too small to read (fine zoom on API 30+),
+# and exposure that steps down for codes shown on screens.
+camera-qr = ["camera", "dep:rqrr"]
 # A foreground service with a notification, controlled from Rust on any
 # thread (android/java/dev/highbay/libmobile/service, src/android/service.rs).
 # Declare it with `gradle::Project::foreground_service`.
@@ -90,6 +94,14 @@ zeroize = { version = "1.8", features = ["derive"] }
 tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
 # Decoding, scaling and encoding launcher icons (`gradle::Icon`, feature `icons`).
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+# QR detection and decoding (feature `camera-qr`). Without `img`, so no
+# `image` dependency: it reads the camera's grey plane directly. Licence
+# `(MIT OR Apache-2.0) AND ISC` (the ISC part from quirc).
+rqrr = { version = "0.11", default-features = false, optional = true }
+
+[dev-dependencies]
+# QR codes rendered for the `camera-qr` host tests only.
+qrcode = { version = "0.14", default-features = false }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }

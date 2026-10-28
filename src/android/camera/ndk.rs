@@ -76,6 +76,22 @@ pub(super) mod tag {
     pub const JPEG_ORIENTATION: u32 = T::ACAMERA_JPEG_ORIENTATION.0;
     #[cfg(feature = "camera-capture")]
     pub const JPEG_QUALITY: u32 = T::ACAMERA_JPEG_QUALITY.0;
+    // QR scanning: metering and focus regions, exposure compensation and the
+    // AF trigger (plan 6.3, 7.2).
+    #[cfg(feature = "camera-qr")]
+    pub const MAX_REGIONS: u32 = T::ACAMERA_CONTROL_MAX_REGIONS.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AE_COMPENSATION_RANGE: u32 = T::ACAMERA_CONTROL_AE_COMPENSATION_RANGE.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AE_COMPENSATION_STEP: u32 = T::ACAMERA_CONTROL_AE_COMPENSATION_STEP.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AE_EXPOSURE_COMPENSATION: u32 = T::ACAMERA_CONTROL_AE_EXPOSURE_COMPENSATION.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AE_REGIONS: u32 = T::ACAMERA_CONTROL_AE_REGIONS.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AF_REGIONS: u32 = T::ACAMERA_CONTROL_AF_REGIONS.0;
+    #[cfg(feature = "camera-qr")]
+    pub const AF_TRIGGER: u32 = T::ACAMERA_CONTROL_AF_TRIGGER.0;
 }
 
 /// `AIMAGE_FORMAT_YUV_420_888`.
@@ -182,6 +198,17 @@ impl Metadata {
         unsafe { entry(self.0.as_ptr(), tag) }
             .map(|e| unsafe { slice(e.data.f, e.count) })
             .unwrap_or_default()
+    }
+
+    /// Rationals as `(numerator, denominator)`.
+    #[cfg(feature = "camera-qr")]
+    pub(super) fn rationals(&self, tag: u32) -> Vec<(i32, i32)> {
+        unsafe { entry(self.0.as_ptr(), tag) }
+            .map(|e| unsafe { slice(e.data.r, e.count) })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| (r.numerator, r.denominator))
+            .collect()
     }
 }
 
@@ -319,6 +346,25 @@ impl Session {
                 &mut callbacks,
                 1,
                 requests.as_mut_ptr(),
+                ptr::null_mut(),
+            )
+        })
+    }
+}
+
+#[cfg(feature = "camera-qr")]
+impl Session {
+    /// Send `requests` once, in order, with no callbacks (an AF trigger: a
+    /// lost one is harmless, the controller triggers again).
+    pub(super) fn trigger(&self, requests: &[&Request]) -> Result<(), Status> {
+        let mut raw: Vec<*mut ffi::ACaptureRequest> =
+            requests.iter().map(|r| r.ptr.as_ptr()).collect();
+        check(unsafe {
+            ffi::ACameraCaptureSession_capture(
+                self.raw(),
+                ptr::null_mut(),
+                raw.len() as c_int,
+                raw.as_mut_ptr(),
                 ptr::null_mut(),
             )
         })

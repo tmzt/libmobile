@@ -206,3 +206,16 @@ amendment of 2026-10-28 14:46 EDT). `MobileEvent` is `#[non_exhaustive]`.
   (`Preview`, `Max`, `AtMost`) and `Frame`; `CameraEvent::Frame`.
 - **Core:** `android::open_app_settings(&AndroidApp)`, which opens this app's
   page in Settings; errors are `OpenLinkError`.
+
+## 0.3.1 — 2026-10-28 (tag `v0.3.1`)
+
+QR scanning (`docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md` step 5,
+with its amendment of 2026-10-28 14:46 EDT). Additive.
+
+- **Feature `camera-qr`** (`camera` plus rqrr 0.11, licence
+  `(MIT OR Apache-2.0) AND ISC`; apps keep its notice):
+  `android::camera::start_qr(&AndroidApp, &QrOptions) -> SessionId`;
+  `libmobile::camera::{QrOptions, QrMode, ScreenExposure, QrCode}` (also in
+  `android::camera`); `CameraEvent::Qr { session, code }` (`CameraEvent` is
+  `#[non_exhaustive]`). Auto zoom reports `CameraEvent::Zoom { source: Auto }`;
+  `zoom_by` during auto zoom multiplies the ratio shown. No manifest change.

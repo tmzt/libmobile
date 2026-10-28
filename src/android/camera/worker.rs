@@ -27,6 +27,8 @@ use super::ndk::{
     self, Device, FORMAT_YUV, Manager, Metadata, Reader, ReaderKind, Session, Template,
     device_error, status, tag,
 };
+#[cfg(feature = "camera-qr")]
+use super::qr::{self, QrState};
 use crate::MobileEvent;
 use crate::android::jni_util::with_app_class;
 #[cfg(feature = "camera-capture")]
@@ -34,6 +36,12 @@ use crate::camera::PREVIEW_MAX;
 use crate::camera::convert::{self, Planes};
 use crate::camera::gate::{Admit, Answer, Gate};
 use crate::camera::geometry::{self, Rect, StreamConfig, ZoomControl};
+#[cfg(feature = "camera-qr")]
+use crate::camera::qr::{
+    QrCode, QrMode, QrOptions,
+    control::{self, AfTrigger, Change, Controller, Limits},
+    scan::{GreyFrame, Scan},
+};
 use crate::camera::{
     CameraError, CameraEvent, Facing, IMAGE_READER_MAX, PreviewFrame, PreviewOptions, SessionId,
     ZoomSource,
@@ -60,6 +68,19 @@ pub(super) enum Msg {
         session: SessionId,
         facing: Facing,
         preview: PreviewOptions,
+    },
+    #[cfg(feature = "camera-qr")]
+    StartQr {
+        app: AndroidApp,
+        session: SessionId,
+        options: QrOptions,
+    },
+    /// The QR thread's result for a frame of the streams of `epoch`.
+    #[cfg(feature = "camera-qr")]
+    QrScan {
+        session: SessionId,
+        epoch: u64,
+        scan: Scan,
     },
     Stop(SessionId),
     Zoom {
@@ -282,6 +303,15 @@ struct CameraInfo {
     /// The AF mode used: continuous picture, else continuous video, else
     /// auto; 0 (off) when the camera has no autofocus.
     af_mode: u8,
+    /// `ACAMERA_CONTROL_AE_COMPENSATION_RANGE` (device steps) and
+    /// `AE_COMPENSATION_STEP` (EV per step; 0 when there is none).
+    #[cfg(feature = "camera-qr")]
+    ev_range: (i32, i32),
+    #[cfg(feature = "camera-qr")]
+    ev_step: f32,
+    /// `ACAMERA_CONTROL_MAX_REGIONS`: AE and AF regions allowed.
+    #[cfg(feature = "camera-qr")]
+    max_regions: (i32, i32),
 }
 
 impl CameraInfo {
@@ -323,7 +353,38 @@ impl CameraInfo {
             configs: geometry::output_configs(&meta.i32s(tag::STREAM_CONFIGURATIONS)),
             zoom: ZoomControl::new(api, ratio_range, max_digital, active),
             af_mode,
+            #[cfg(feature = "camera-qr")]
+            ev_range: match meta.i32s(tag::AE_COMPENSATION_RANGE)[..] {
+                [min, max, ..] if min <= max => (min, max),
+                _ => (0, 0),
+            },
+            #[cfg(feature = "camera-qr")]
+            ev_step: match meta.rationals(tag::AE_COMPENSATION_STEP).first() {
+                Some(&(n, d)) if d != 0 && n > 0 => n as f32 / d as f32,
+                _ => 0.0,
+            },
+            #[cfg(feature = "camera-qr")]
+            max_regions: match meta.i32s(tag::MAX_REGIONS)[..] {
+                // AE, AWB, AF.
+                [ae, _, af, ..] => (ae, af),
+                _ => (0, 0),
+            },
         })
+    }
+
+    /// What auto zoom and exposure may use on this camera, at the app's
+    /// zoom `user`.
+    #[cfg(feature = "camera-qr")]
+    fn qr_limits(&self, user: f32) -> Limits {
+        Limits {
+            user,
+            max_ratio: self.zoom.range().1,
+            fine: matches!(self.zoom, ZoomControl::Ratio { .. }),
+            ae_regions: self.max_regions.0 > 0,
+            af_regions: self.max_regions.1 > 0 && self.af_mode != 0,
+            has_af: self.af_mode != 0,
+            ev_floor: control::ev_floor(self.ev_range, self.ev_step),
+        }
     }
 
     #[cfg(feature = "camera-capture")]
@@ -381,17 +442,36 @@ enum SessionPhase {
 struct LiveSession {
     id: SessionId,
     facing: Facing,
-    preview: PreviewOptions,
+    /// `None`: no preview frames (a QR session without a viewfinder).
+    preview: Option<PreviewOptions>,
     /// The app's zoom ratio (`set_zoom` / `zoom_by`).
     user_zoom: f32,
     phase: SessionPhase,
     sequence: u64,
+    /// A QR session's decoder hand-off, auto zoom and exposure.
+    #[cfg(feature = "camera-qr")]
+    qr: Option<QrState>,
 }
 
 impl LiveSession {
     /// Whether it wants the camera (granted, not stopped).
     fn wants_camera(&self) -> bool {
         self.phase != SessionPhase::Permission
+    }
+
+    /// The QR controller, while the session is open.
+    #[cfg(feature = "camera-qr")]
+    fn control(&self) -> Option<&Controller> {
+        self.qr.as_ref().and_then(|q| q.control.as_ref())
+    }
+
+    /// Auto zoom's factor on top of the app's zoom (1 outside QR scanning).
+    fn auto_zoom(&self) -> f32 {
+        #[cfg(feature = "camera-qr")]
+        if let Some(c) = self.control() {
+            return c.auto();
+        }
+        1.0
     }
 }
 
@@ -484,23 +564,32 @@ impl Worker {
                 session,
                 facing,
                 preview,
-            } => {
-                self.set_app(app);
-                self.end_session(None);
-                let phase = match self.admit(Call::Session(session)) {
-                    Some(_) => SessionPhase::Ready,
-                    None => SessionPhase::Permission,
-                };
-                self.session = Some(LiveSession {
-                    id: session,
-                    facing,
-                    preview,
-                    user_zoom: 1.0,
-                    phase,
-                    sequence: 0,
-                });
-                reset_shared(Some(session));
-            }
+            } => self.start_session(
+                app,
+                session,
+                facing,
+                Some(preview),
+                #[cfg(feature = "camera-qr")]
+                None,
+            ),
+            #[cfg(feature = "camera-qr")]
+            Msg::StartQr {
+                app,
+                session,
+                options,
+            } => self.start_session(
+                app,
+                session,
+                options.facing,
+                options.preview,
+                Some(QrState::new(options)),
+            ),
+            #[cfg(feature = "camera-qr")]
+            Msg::QrScan {
+                session,
+                epoch,
+                scan,
+            } => self.qr_scan(session, epoch, &scan),
             Msg::Stop(session) => {
                 if self.session.as_ref().is_some_and(|s| s.id == session) {
                     self.end_session(None);
@@ -548,6 +637,35 @@ impl Worker {
             Msg::Destroy => self.destroy(),
             Msg::Ndk { epoch, event } => self.ndk(epoch, event),
         }
+    }
+
+    /// A new session (stopping the old one first), waiting for the
+    /// permission answer if CAMERA is not granted yet.
+    fn start_session(
+        &mut self,
+        app: AndroidApp,
+        session: SessionId,
+        facing: Facing,
+        preview: Option<PreviewOptions>,
+        #[cfg(feature = "camera-qr")] qr: Option<QrState>,
+    ) {
+        self.set_app(app);
+        self.end_session(None);
+        let phase = match self.admit(Call::Session(session)) {
+            Some(_) => SessionPhase::Ready,
+            None => SessionPhase::Permission,
+        };
+        self.session = Some(LiveSession {
+            id: session,
+            facing,
+            preview,
+            user_zoom: 1.0,
+            phase,
+            sequence: 0,
+            #[cfg(feature = "camera-qr")]
+            qr,
+        });
+        reset_shared(Some(session));
     }
 
     /// Pass `call` through the gate: `Some` if it may go ahead now; else it
@@ -652,7 +770,9 @@ impl Worker {
         };
         let target = match change {
             ZoomChange::Set(ratio) => ratio,
-            ZoomChange::By(factor) => s.user_zoom * factor,
+            // From the ratio shown, auto zoom included, so a pinch during
+            // auto zoom does not jump back to the app's last ratio first.
+            ZoomChange::By(factor) => s.user_zoom * s.auto_zoom() * factor,
         };
         if !target.is_finite() || target <= 0.0 {
             return;
@@ -661,7 +781,16 @@ impl Worker {
             (SessionPhase::Open, Some(control)) => control.clamp(target),
             _ => target.max(1.0),
         };
-        if ratio == s.user_zoom {
+        // A pinch wins over auto zoom: back to the app's zoom, and auto zoom
+        // pauses (plan 6.2).
+        #[cfg(feature = "camera-qr")]
+        let auto_dropped =
+            s.qr.as_mut()
+                .and_then(|q| q.control.as_mut())
+                .is_some_and(|c| c.app_zoomed(Instant::now()));
+        #[cfg(not(feature = "camera-qr"))]
+        let auto_dropped = false;
+        if ratio == s.user_zoom && !auto_dropped {
             return;
         }
         s.user_zoom = ratio;
@@ -768,6 +897,15 @@ impl Worker {
             NdkEvent::StillImage if Some(epoch) == streams_epoch => self.still_image(),
             NdkEvent::Result { ae, af } if Some(epoch) == streams_epoch => {
                 self.three_a = Some((ae, af));
+                #[cfg(feature = "camera-qr")]
+                if let Some(c) = self
+                    .session
+                    .as_mut()
+                    .and_then(|s| s.qr.as_mut())
+                    .and_then(|q| q.control.as_mut())
+                {
+                    c.ae_state(ae);
+                }
             }
             #[cfg(feature = "camera-capture")]
             NdkEvent::StillFailed if Some(epoch) == streams_epoch => {
@@ -801,15 +939,34 @@ impl Worker {
         let Some(planes) = yuv_planes(&image) else {
             return;
         };
+        #[cfg(feature = "camera-qr")]
         if let Some(s) = self
             .session
             .as_mut()
             .filter(|s| s.phase == SessionPhase::Open)
+            && let Some(q) = s.qr.as_mut()
+            && q.due(Instant::now())
         {
-            let factor = convert::scale_factor(planes.width, planes.height, s.preview.max_side);
+            qr::submit(qr::Job {
+                session: s.id,
+                epoch: streams.epoch,
+                grey: GreyFrame {
+                    width: planes.width,
+                    height: planes.height,
+                    data: convert::pack_gray(&planes),
+                },
+            });
+        }
+        if let Some(s) = self
+            .session
+            .as_mut()
+            .filter(|s| s.phase == SessionPhase::Open)
+            && let Some(preview) = s.preview
+        {
+            let factor = convert::scale_factor(planes.width, planes.height, preview.max_side);
             let mut i420 = convert::to_i420(&planes, factor);
             let mut quarter_turns = turns;
-            if s.preview.upright {
+            if preview.upright {
                 i420 = i420.rotated(turns);
                 quarter_turns = 0;
             }
@@ -1163,6 +1320,8 @@ impl Worker {
             epoch,
             config,
         });
+        #[cfg(feature = "camera-qr")]
+        self.qr_prepare(config.camera);
         self.repeat()
             .map_err(|s| (who, failed("repeating request", s)))?;
         Ok(())
@@ -1170,12 +1329,12 @@ impl Worker {
 
     /// The zoom the camera should use now.
     fn zoom_ratio(&self, info: &CameraInfo) -> f32 {
-        let user = self
+        let ratio = self
             .session
             .as_ref()
             .filter(|s| s.wants_camera())
-            .map_or(1.0, |s| s.user_zoom);
-        info.zoom.clamp(user)
+            .map_or(1.0, |s| s.user_zoom * s.auto_zoom());
+        info.zoom.clamp(ratio)
     }
 
     /// The controls every request carries: AF, AE, antibanding and zoom.
@@ -1185,12 +1344,56 @@ impl Worker {
         request.set_u8(tag::AE_ANTIBANDING_MODE, &[3])?; // AUTO
         let ratio = self.zoom_ratio(info);
         match info.zoom {
-            ZoomControl::Ratio { .. } => request.set_f32(tag::ZOOM_RATIO, &[ratio]),
+            ZoomControl::Ratio { .. } => request.set_f32(tag::ZOOM_RATIO, &[ratio])?,
             ZoomControl::Crop { active, .. } => {
                 let c = geometry::crop_region(active, ratio);
-                request.set_i32(tag::CROP_REGION, &[c.x, c.y, c.w, c.h])
+                request.set_i32(tag::CROP_REGION, &[c.x, c.y, c.w, c.h])?
             }
         }
+        #[cfg(feature = "camera-qr")]
+        self.qr_controls(request, info, ratio)?;
+        Ok(())
+    }
+
+    /// A QR session's exposure compensation and metering and focus regions
+    /// (plan 6.3, 6.4, 7.2). A region not set is left to the camera (the
+    /// whole field).
+    #[cfg(feature = "camera-qr")]
+    fn qr_controls(
+        &self,
+        request: &mut ndk::Request,
+        info: &CameraInfo,
+        ratio: f32,
+    ) -> Result<(), ndk::Status> {
+        let Some(c) = self.session.as_ref().and_then(LiveSession::control) else {
+            return Ok(());
+        };
+        let Some((w, h)) = self
+            .open
+            .as_ref()
+            .and_then(|o| o.streams.as_ref())
+            .map(|s| s.config.analysis)
+        else {
+            return Ok(());
+        };
+        let aspect = w as f32 / h.max(1) as f32;
+        if info.ev_step > 0.0 {
+            let steps = control::ev_steps(c.ev(), info.ev_range, info.ev_step);
+            request.set_i32(tag::AE_EXPOSURE_COMPENSATION, &[steps])?;
+        }
+        if let Some(area) = c.ae_region().filter(|_| info.max_regions.0 > 0) {
+            request.set_i32(
+                tag::AE_REGIONS,
+                &geometry::region(&info.zoom, ratio, area, aspect),
+            )?;
+        }
+        if let Some(area) = c.af_region().filter(|_| info.max_regions.1 > 0) {
+            request.set_i32(
+                tag::AF_REGIONS,
+                &geometry::region(&info.zoom, ratio, area, aspect),
+            )?;
+        }
+        Ok(())
     }
 
     /// (Re)start the repeating preview request on the analysis stream.
@@ -1228,9 +1431,14 @@ impl Worker {
             s.user_zoom = info.zoom.clamp(s.user_zoom);
             let range = info.zoom.range();
             let (w, h) = streams.config.analysis;
-            let factor = convert::scale_factor(w as usize, h as usize, s.preview.max_side) as u32;
+            // Without a preview: the analysis frame's size, upright.
+            let preview = s.preview.unwrap_or(PreviewOptions {
+                max_side: w.max(h),
+                upright: true,
+            });
+            let factor = convert::scale_factor(w as usize, h as usize, preview.max_side) as u32;
             let (mut w, mut h) = (w / factor, h / factor);
-            if s.preview.upright && turns % 2 == 1 {
+            if preview.upright && turns % 2 == 1 {
                 std::mem::swap(&mut w, &mut h);
             }
             {
@@ -1316,6 +1524,164 @@ impl Worker {
             request.set_u8(tag::JPEG_QUALITY, &[options.jpeg_quality.clamp(1, 100)])?;
         }
         streams.session.capture(&request, streams.epoch)
+    }
+
+    // ── QR scanning ──────────────────────────────────────────────────────────
+
+    /// New streams for a QR session about to open (or reopen after a pause):
+    /// its controller starts over with this camera's limits, so the first
+    /// repeating request already carries `ScreenExposure::Screen`'s start.
+    #[cfg(feature = "camera-qr")]
+    fn qr_prepare(&mut self, camera: usize) {
+        let info = &self.cameras[camera];
+        let Some(s) = self
+            .session
+            .as_mut()
+            .filter(|s| matches!(s.phase, SessionPhase::Ready | SessionPhase::Suspended))
+        else {
+            return;
+        };
+        let user = info.zoom.clamp(s.user_zoom);
+        if let Some(q) = s.qr.as_mut() {
+            let limits = info.qr_limits(user);
+            q.control = Some(Controller::new(
+                q.options.exposure,
+                q.options.auto_zoom,
+                &limits,
+            ));
+            q.dedup = Default::default();
+            q.last_submit = None;
+            log::info!(
+                "libmobile: QR session {} ({:?}, auto zoom {}, {:?} exposure, EV floor {}, {} zoom)",
+                s.id.id(),
+                q.options.mode,
+                q.options.auto_zoom,
+                q.options.exposure,
+                limits.ev_floor,
+                if limits.fine { "fine" } else { "coarse" },
+            );
+        }
+    }
+
+    /// The QR thread's result: report the codes read, then let auto zoom and
+    /// exposure make at most one change.
+    #[cfg(feature = "camera-qr")]
+    fn qr_scan(&mut self, session: SessionId, epoch: u64, scan: &Scan) {
+        let now = Instant::now();
+        let Some(open) = &self.open else {
+            return;
+        };
+        if open.streams.as_ref().map(|s| s.epoch) != Some(epoch) {
+            return; // A frame of older streams.
+        }
+        let info = &self.cameras[open.camera];
+        let turns = geometry::quarter_turns(info.sensor, self.display.0, info.facing);
+        let Some(s) = self
+            .session
+            .as_mut()
+            .filter(|s| s.id == session && s.phase == SessionPhase::Open)
+        else {
+            return;
+        };
+        let limits = info.qr_limits(s.user_zoom);
+        let Some(q) = s.qr.as_mut() else {
+            return;
+        };
+        let mut reported = false;
+        for read in &scan.codes {
+            let bytes = &read.bytes;
+            if !q.dedup.admit(bytes, now) {
+                continue;
+            }
+            // Never the payload itself: it may be a pairing secret.
+            log::info!(
+                "libmobile: QR code on session {} ({} bytes, version {})",
+                session.id(),
+                bytes.len(),
+                read.version
+            );
+            emit(CameraEvent::Qr {
+                session,
+                code: QrCode::new(
+                    bytes.clone(),
+                    read.corners,
+                    read.version,
+                    (scan.width, scan.height),
+                    turns,
+                ),
+            });
+            reported = true;
+            if q.options.mode == QrMode::Once {
+                break;
+            }
+        }
+        if reported && q.options.mode == QrMode::Once {
+            self.end_session(None);
+            return;
+        }
+        let Some(ctl) = q.control.as_mut() else {
+            return;
+        };
+        let Some(change) = ctl.step(scan, now, &limits) else {
+            return;
+        };
+        let (auto, ev) = (ctl.auto(), ctl.ev());
+        let applied = self.repeat();
+        if let Err(status) = applied {
+            log::warn!("libmobile: QR {change:?} not applied: status {status}");
+            return;
+        }
+        match change {
+            Change::Zoom => {
+                let ratio = self.zoom_ratio(info);
+                log::info!("libmobile: QR auto zoom ×{auto:.2}: ratio {ratio:.2}");
+                let before = lock(&SHARED).zoom.replace(ratio);
+                if before == Some(ratio) {
+                    return; // At the device's limit: nothing changed.
+                }
+                emit(CameraEvent::Zoom {
+                    session,
+                    ratio,
+                    source: ZoomSource::Auto,
+                });
+            }
+            Change::Exposure => {
+                let steps = control::ev_steps(ev, info.ev_range, info.ev_step);
+                log::info!("libmobile: QR exposure {ev:+.1} EV ({steps} steps)");
+            }
+            Change::Focus(trigger) => {
+                if let Err(status) = self.af_trigger(trigger) {
+                    log::warn!("libmobile: QR AF trigger not sent: status {status}");
+                }
+            }
+        }
+    }
+
+    /// Send `ACAMERA_CONTROL_AF_TRIGGER` once on the analysis stream. A start
+    /// is preceded by a cancel: in the continuous AF modes a start locks
+    /// focus, and only a cancel unlocks it for the next start.
+    #[cfg(feature = "camera-qr")]
+    fn af_trigger(&self, trigger: AfTrigger) -> Result<(), ndk::Status> {
+        let Some(open) = &self.open else {
+            return Ok(());
+        };
+        let Some(streams) = &open.streams else {
+            return Ok(());
+        };
+        let info = &self.cameras[open.camera];
+        let request = |value: u8| -> Result<ndk::Request, ndk::Status> {
+            let mut request = open.device.request(Template::Preview)?;
+            request.add_target(&streams.analysis)?;
+            self.controls(&mut request, info)?;
+            // CONTROL_AF_TRIGGER: START 1, CANCEL 2.
+            request.set_u8(tag::AF_TRIGGER, &[value])?;
+            Ok(request)
+        };
+        let cancel = request(2)?;
+        match trigger {
+            AfTrigger::Cancel => streams.session.trigger(&[&cancel]),
+            AfTrigger::Start => streams.session.trigger(&[&cancel, &request(1)?]),
+        }
     }
 
     fn close(&mut self) {
