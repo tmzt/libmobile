@@ -83,6 +83,13 @@ fn main() {
         out_dir.join("libmobile.gradle").display()
     );
     println!("cargo:features={}", enabled.join(","));
+
+    // The NDK camera (feature `camera`): ndk-sys declares `ACamera*` but
+    // links no library for them. An rlib's link line reaches the app's cdylib.
+    let android = env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "android");
+    if android && feature_enabled("camera") {
+        println!("cargo:rustc-link-lib=camera2ndk");
+    }
 }
 
 fn feature_enabled(feature: &str) -> bool {

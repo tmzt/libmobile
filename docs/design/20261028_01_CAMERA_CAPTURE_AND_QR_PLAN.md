@@ -1,7 +1,7 @@
 ---
 title: Single-frame camera capture and QR scanning with auto zoom
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Feature `camera-device`: an in-process camera on the NDK Camera2 API
     (`ACamera*`, `AImageReader`), opened only when the app uses it, with
@@ -937,3 +937,10 @@ body, it wins.
    the preview on by default; the `mobile-` names).
 7. **Approved.** The plan is approved with this amendment; the status
    becomes `In implementation` with its first code commit.
+
+## Amendment — 2026-10-28 15:13 EDT: implementation has started; the document is now immutable
+
+Implementation has started with the camera base and single-frame capture
+(steps 1-4, in one commit). The status is `In implementation`, and the
+document is now immutable: it changes only on the owner's explicit
+instruction.

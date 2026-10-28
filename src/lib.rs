@@ -67,6 +67,8 @@ pub mod battery;
 pub mod build_info;
 #[cfg(feature = "camera")]
 pub mod camera;
+#[cfg(feature = "camera-intent")]
+pub mod camera_intent;
 pub mod codegen;
 pub mod event;
 pub mod gradle;

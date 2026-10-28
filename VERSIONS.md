@@ -177,3 +177,32 @@ and the system's night mode with the system bars' icons
   `android::set_system_bar_icons(status_dark, navigation_dark)`; the first
   call also turns off the bars' contrast scrims and makes their colours
   transparent.
+
+## 0.3.0 — 2026-10-28 (tag `v0.3.0`)
+
+The in-process camera, single-frame capture and opening the app's Settings
+page (`docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md` and its
+amendment of 2026-10-28 14:46 EDT). `MobileEvent` is `#[non_exhaustive]`.
+
+- **Breaking: feature `camera` renamed `camera-intent`** (the system camera
+  app hand-off, `ACTION_IMAGE_CAPTURE`). `libmobile::camera::CaptureOutcome`
+  moves to `libmobile::camera_intent::CaptureOutcome`, and
+  `android::camera::capture_photo` to `android::camera_intent::capture_photo`
+  (`android::capture_photo` is unchanged). Its Kotlin plugin is now
+  `cameraintent.CameraIntentPlugin`. Its manifest contribution is unchanged.
+- **Breaking: feature `camera` is now the in-process NDK camera** (`ACamera*`,
+  `AImageReader`, no Jetpack). It adds `CAMERA` and optional
+  `android.hardware.camera`, `camera.autofocus` and `camera.any`
+  `uses-feature`s to the manifest, and links `libcamera2ndk`. CAMERA is
+  asked for on the first camera call, never at launch.
+  `libmobile::camera::{Facing, SessionId, CaptureId, CameraError,
+  CameraEvent, ZoomSource, PreviewOptions, PreviewFrame}`;
+  `android::camera::{start_preview, stop, latest_preview, zoom_range, zoom,
+  set_zoom, zoom_by}`; `MobileEvent::Camera`. A refusal fails with
+  `CameraError::PermissionDenied { settings_only }`. With `camera-intent`
+  also on, `capture_photo` asks for CAMERA first.
+- **Feature `camera-capture`:** `capture_frame` and `cancel_capture`, with
+  `CaptureOptions`, `FrameFormat` (`Gray8`, `Rgba8`, `Jpeg`), `Resolution`
+  (`Preview`, `Max`, `AtMost`) and `Frame`; `CameraEvent::Frame`.
+- **Core:** `android::open_app_settings(&AndroidApp)`, which opens this app's
+  page in Settings; errors are `OpenLinkError`.

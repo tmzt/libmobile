@@ -8,11 +8,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
+import android.provider.Settings
 import dev.highbay.libmobile.MobileActivityPlugin
 import java.lang.ref.WeakReference
 
 /**
- * Opens a link in the app that handles it (`libmobile::android::link`).
+ * Opens a link in the app that handles it (`libmobile::android::link`), and
+ * this app's page in Settings ([openAppSettings]).
  *
  * Rust checks the URL first (http or https only), then calls [open] from
  * any thread with the Application (from `ndk-context`). It returns `null`
@@ -38,9 +40,32 @@ object LinkPlugin : MobileActivityPlugin {
     /** Called from Rust via JNI: static, `(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;`. */
     @JvmStatic
     fun open(context: Context, url: String): String? {
-        // Android 10+ refuses, silently, an activity start from an app that
-        // is not visible; a hidden app with a foreground service is
-        // IMPORTANCE_FOREGROUND_SERVICE and is refused too.
+        notVisible()?.let { return it }
+        return startFrom(context, Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    /**
+     * This app's page in Settings (`libmobile::android::open_app_settings`),
+     * where the user can grant a permission they refused for good. Called
+     * from Rust via JNI: static,
+     * `(Landroid/content/Context;)Ljava/lang/String;`; answers as [open].
+     */
+    @JvmStatic
+    fun openAppSettings(context: Context): String? {
+        notVisible()?.let { return it }
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null),
+        )
+        return startFrom(context, intent)
+    }
+
+    /**
+     * Android 10+ refuses, silently, an activity start from an app that is
+     * not visible; a hidden app with a foreground service is
+     * IMPORTANCE_FOREGROUND_SERVICE and is refused too.
+     */
+    private fun notVisible(): String? {
         val state = ActivityManager.RunningAppProcessInfo()
         ActivityManager.getMyMemoryState(state)
         if (state.importance != ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND &&
@@ -48,7 +73,10 @@ object LinkPlugin : MobileActivityPlugin {
         ) {
             return "not-visible: importance ${state.importance}"
         }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        return null
+    }
+
+    private fun startFrom(context: Context, intent: Intent): String? {
         // From the activity on its UI thread; from any other thread, from
         // the Application in a new task. Not by waiting for the UI thread:
         // while the activity starts or changes state, the UI thread waits

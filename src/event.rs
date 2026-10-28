@@ -161,8 +161,12 @@ pub enum MobileEvent {
     TextChanged(String),
     #[cfg(feature = "google-auth")]
     GoogleLogin(crate::auth::LoginOutcome),
+    /// The system camera app's photo (`camera-intent`).
+    #[cfg(feature = "camera-intent")]
+    Capture(crate::camera_intent::CaptureOutcome),
+    /// The in-process camera: sessions, zoom and captures (`camera`).
     #[cfg(feature = "camera")]
-    Capture(crate::camera::CaptureOutcome),
+    Camera(crate::camera::CameraEvent),
     /// The foreground service did something, or its notification was
     /// tapped (`android::service`). Also delivered to system-event
     /// subscribers under `system-events`.

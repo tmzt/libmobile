@@ -1,86 +1,45 @@
 package dev.highbay.libmobile.camera
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.graphics.Bitmap
+import android.graphics.Point
 import android.os.Build
-import android.provider.MediaStore
-import android.util.Log
 import dev.highbay.libmobile.MobileActivityPlugin
-import dev.highbay.libmobile.NativeLib
-import java.io.ByteArrayOutputStream
 
 /**
- * Photo capture through the system camera app (Cargo feature `camera`).
+ * The in-process camera (Cargo feature `camera`).
  *
- * Rust (`libmobile::android::capture_photo`) calls [capture]; the camera app
- * returns through [onActivityResult], and the preview bitmap goes back to
- * Rust JPEG-encoded, arriving as `MobileEvent::Capture`. No CAMERA permission
- * is needed — unless the app's manifest declares it, in which case Android
- * requires it to be granted before `ACTION_IMAGE_CAPTURE` will launch.
- *
- * Every path produces an outcome, including a cancelled camera.
+ * The camera itself is the NDK's (`ACamera*`, `AImageReader`), driven from
+ * Rust (`src/android/camera/`); no Jetpack, no Android view. This plugin
+ * only answers what the NDK cannot: the display's rotation, for upright
+ * frames, and its size, for the preview stream's aspect. CAMERA is asked for
+ * through the core `bridge.PermissionPlugin`, on the first camera call.
  */
 object CameraPlugin : MobileActivityPlugin {
-    /** Arbitrary; distinguishes our result from any other plugin's. */
-    private const val REQUEST_CODE = 0x4c4d // "LM"
-    private const val JPEG_QUALITY = 90
-
-    /** Called from Rust via JNI: static, `(Landroid/app/Activity;)V`. */
-    @JvmStatic
-    fun capture(activity: Activity) {
-        activity.runOnUiThread {
-            try {
-                @Suppress("DEPRECATION")
-                activity.startActivityForResult(Intent(MediaStore.ACTION_IMAGE_CAPTURE), REQUEST_CODE)
-            } catch (e: ActivityNotFoundException) {
-                deliver(null, "no_camera_app")
-            } catch (e: SecurityException) {
-                deliver(null, "permission_denied: ${e.message}")
-            }
-        }
-    }
-
-    override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?): Boolean {
-        if (requestCode != REQUEST_CODE) return false
-        if (resultCode != Activity.RESULT_OK) {
-            deliver(null, "cancelled")
-            return true
-        }
-        val bitmap = data?.extras?.let { extras ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                extras.getParcelable("data", Bitmap::class.java)
-            } else {
-                @Suppress("DEPRECATION")
-                extras.getParcelable("data") as? Bitmap
-            }
-        }
-        if (bitmap == null) {
-            deliver(null, "no_image")
-            return true
-        }
-        val out = ByteArrayOutputStream()
-        if (bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
-            deliver(out.toByteArray(), null)
-        } else {
-            deliver(null, "encode_failed")
-        }
-        return true
-    }
-
-    /** Exactly one of [jpeg] / [error] is non-null. */
-    private fun deliver(jpeg: ByteArray?, error: String?) {
-        try {
-            nativeCaptureResult(jpeg, error)
-        } catch (e: UnsatisfiedLinkError) {
-            Log.e(NativeLib.TAG, "camera: native callback unavailable", e)
-        }
-    }
-
     /**
-     * Implemented in Rust (`src/android/camera.rs`) as
-     * `Java_dev_highbay_libmobile_camera_CameraPlugin_nativeCaptureResult`.
+     * Called from Rust via JNI (any thread): static,
+     * `(Landroid/app/Activity;)[I`. `[rotation in degrees (0, 90, 180, 270),
+     * width px, height px]` of the display the activity is on.
      */
-    private external fun nativeCaptureResult(jpeg: ByteArray?, error: String?)
+    @JvmStatic
+    fun displayInfo(activity: Activity): IntArray {
+        val rotation: Int
+        val width: Int
+        val height: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            rotation = activity.display?.rotation ?: 0
+            val bounds = activity.windowManager.currentWindowMetrics.bounds
+            width = bounds.width()
+            height = bounds.height()
+        } else {
+            @Suppress("DEPRECATION")
+            val display = activity.windowManager.defaultDisplay
+            rotation = display.rotation
+            val size = Point()
+            @Suppress("DEPRECATION")
+            display.getRealSize(size)
+            width = size.x
+            height = size.y
+        }
+        return intArrayOf(rotation * 90, width, height)
+    }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "libmobile"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
@@ -28,9 +28,20 @@ default = []
 # (android/java/dev/highbay/libmobile/auth, src/android/auth.rs). Also adds the
 # androidx.credentials + googleid AARs to the generated Gradle script.
 google-auth = []
-# Photo capture through the system camera app
-# (android/java/dev/highbay/libmobile/camera, src/android/camera.rs).
-camera = []
+# Photo capture through the system camera app (`ACTION_IMAGE_CAPTURE`;
+# android/java/dev/highbay/libmobile/cameraintent,
+# src/android/camera_intent.rs). Named `camera` before 0.3.0. Declares no
+# permission; with `camera` also on, CAMERA is in the manifest and is asked
+# for first.
+camera-intent = []
+# The in-process camera on the NDK Camera2 API (`ACamera*`, `AImageReader`;
+# android/java/dev/highbay/libmobile/camera, src/android/camera/): sessions,
+# preview frames, zoom, `MobileEvent::Camera`. Adds CAMERA and optional
+# `uses-feature`s to the manifest and links libcamera2ndk (build.rs). CAMERA
+# is asked for on the first camera call, never at launch.
+camera = ["dep:ndk-sys", "ndk-sys/media"]
+# One still frame (`android::camera::capture_frame`): Gray8, Rgba8 or Jpeg.
+camera-capture = ["camera"]
 # A foreground service with a notification, controlled from Rust on any
 # thread (android/java/dev/highbay/libmobile/service, src/android/service.rs).
 # Declare it with `gradle::Project::foreground_service`.
@@ -96,6 +107,10 @@ jni = "0.22"
 # any thread and without an activity. Shares android-activity's copy.
 ndk-context = "0.1"
 cpal = { version = "0.18.2", optional = true }
+# The NDK camera (`ACamera*`) and `AImageReader` (feature `camera`), as raw
+# bindings: the same 0.6 ndk 0.9 resolves. libcamera2ndk is linked by build.rs
+# (ndk-sys declares the camera functions but links no library for them).
+ndk-sys = { version = "0.6", optional = true }
 
 [workspace]
 members = [".", "examples/bitmap", "examples/wgpu", "examples/audiocapture", "examples/securestore", "examples/background"]

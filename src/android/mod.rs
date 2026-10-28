@@ -8,7 +8,7 @@
 //!    returns, because `AndroidApp::native_window()` takes the same internal
 //!    lock the poll callback holds);
 //! 2. drains the Kotlin bridges' mailboxes — insets, intents, IME text, and
-//!    permission answers, memory-trim levels, service and alert events and the feature results — as [`MobileEvent`]s, *before* input, so a tap that
+//!    permission answers, memory-trim levels, service and alert events and the feature results (the camera's among them) — as [`MobileEvent`]s, *before* input, so a tap that
 //!    lands in the same tick as a rotation is resolved against the new insets;
 //! 3. pumps input events to [`MobileApp::input`];
 //! 4. calls [`MobileApp::tick`], where the app drains its own
@@ -29,6 +29,8 @@ pub mod battery;
 mod build_info;
 #[cfg(feature = "camera")]
 pub mod camera;
+#[cfg(feature = "camera-intent")]
+pub mod camera_intent;
 pub mod dirs;
 mod insets;
 mod intent;
@@ -60,10 +62,11 @@ pub use audio_capture::CaptureStream;
 #[cfg(feature = "google-auth")]
 pub use auth::start_google_login;
 pub use build_info::{BuildInfo, build_info};
-#[cfg(feature = "camera")]
-pub use camera::capture_photo;
+#[cfg(feature = "camera-intent")]
+pub use camera_intent::capture_photo;
 #[cfg(feature = "cpal")]
 pub use cpal;
+pub use link::open_app_settings;
 pub use ndk;
 pub use permission::{permission_granted, request_permissions, should_show_rationale};
 pub use surface::SurfaceTarget;
@@ -137,6 +140,8 @@ pub fn run<A: MobileApp>(app: AndroidApp, mut handler: A) {
         });
 
         for event in deferred {
+            #[cfg(feature = "camera")]
+            camera::lifecycle(&app, &event);
             handler.event(&app, event);
         }
         pump_bridges(&app, &mut handler);
@@ -144,6 +149,8 @@ pub fn run<A: MobileApp>(app: AndroidApp, mut handler: A) {
         handler.tick(&app);
 
         if destroy {
+            #[cfg(feature = "camera")]
+            camera::lifecycle(&app, &MobileEvent::Destroy);
             handler.event(&app, MobileEvent::Destroy);
             break;
         }
@@ -188,12 +195,22 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     for outcome in auth::take_results() {
         handler.event(app, MobileEvent::GoogleLogin(outcome));
     }
-    #[cfg(feature = "camera")]
-    for outcome in camera::take_results() {
+    #[cfg(feature = "camera-intent")]
+    for outcome in camera_intent::take_results() {
         handler.event(app, MobileEvent::Capture(outcome));
     }
     for outcome in permission::take_results() {
+        // The camera's own CAMERA request is answered to its gate, not to
+        // the app.
+        #[cfg(feature = "camera")]
+        let Some(outcome) = camera::offer_permission(outcome) else {
+            continue;
+        };
         handler.event(app, MobileEvent::Permissions(outcome));
+    }
+    #[cfg(feature = "camera")]
+    for event in camera::take_events() {
+        handler.event(app, MobileEvent::Camera(event));
     }
     #[cfg(feature = "foreground-service")]
     for event in service::take_events() {
@@ -228,8 +245,10 @@ fn discard_stale_commands() {
     let _ = trim_memory::take_pending();
     #[cfg(feature = "google-auth")]
     let _ = auth::take_results();
+    #[cfg(feature = "camera-intent")]
+    let _ = camera_intent::take_results();
     #[cfg(feature = "camera")]
-    let _ = camera::take_results();
+    let _ = camera::take_events();
     let _ = permission::take_results();
     #[cfg(feature = "foreground-service")]
     let _ = service::take_events();

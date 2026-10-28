@@ -87,6 +87,11 @@ impl Plugin {
     }
 }
 
+/// `android.hardware.camera.any`, optional: contributed by both camera
+/// plugins, deduplicated by [`merge`].
+const CAMERA_ANY_OPTIONAL: &str =
+    "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />";
+
 /// Every plugin the crate ships, in dispatch order. Core bridges come first so
 /// a feature plugin's `onCreate` can rely on insets/intents already being wired.
 pub const PLUGINS: &[Plugin] = &[
@@ -157,10 +162,13 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
+    // Photo capture through the system camera app (`cameraintent/`,
+    // `src/android/camera_intent.rs`). Named `camera` before 0.3.0; its
+    // manifest contribution is unchanged.
     Plugin {
-        feature: Some("camera"),
-        dir: "camera",
-        class: "camera.CameraPlugin",
+        feature: Some("camera-intent"),
+        dir: "cameraintent",
+        class: "cameraintent.CameraIntentPlugin",
         contributes: Contributes {
             manifest: &[
                 // Package visibility (API 30+): lets the plugin see that a
@@ -168,7 +176,29 @@ pub const PLUGINS: &[Plugin] = &[
                 "<queries><intent><action android:name=\"android.media.action.IMAGE_CAPTURE\" /></intent></queries>",
                 // Optional: the plugin degrades to `no_camera_app`, so Play
                 // must not filter camera-less devices out.
-                "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />",
+                CAMERA_ANY_OPTIONAL,
+            ],
+            ..Contributes::NOTHING
+        },
+    },
+    // The in-process NDK camera (`camera/`, `src/android/camera/`): the
+    // plugin only reports the display's rotation and size. CAMERA is asked
+    // for on the first camera call, through the core `PermissionPlugin`.
+    Plugin {
+        feature: Some("camera"),
+        dir: "camera",
+        class: "camera.CameraPlugin",
+        contributes: Contributes {
+            permissions: &["android.permission.CAMERA"],
+            manifest: &[
+                // CAMERA implies these two as required; declared optional so
+                // Play does not filter out devices without a back camera or
+                // autofocus. The camera is opened only when the app asks.
+                "<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />",
+                "<uses-feature android:name=\"android.hardware.camera.autofocus\" android:required=\"false\" />",
+                // The same string as `camera-intent`'s, so `merge` emits it
+                // once when both are on.
+                CAMERA_ANY_OPTIONAL,
             ],
             ..Contributes::NOTHING
         },
@@ -1017,6 +1047,7 @@ mod tests {
             known_features(),
             vec![
                 "google-auth",
+                "camera-intent",
                 "camera",
                 "foreground-service",
                 "battery",
@@ -1334,25 +1365,90 @@ mod tests {
         assert!(merged.manifest.is_empty() && merged.permissions.is_empty());
     }
 
+    /// The manifest contributions of an app built with `features`, rendered
+    /// as `gradle_script` splices them.
+    fn manifest_of(features: &[&str]) -> Merged {
+        merge(&active_plugins(features))
+    }
+
     #[test]
-    fn camera_plugin_declares_queries_and_optional_feature() {
-        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "camera"));
-        let active = active_plugins(&["camera"]);
-        assert!(active.iter().any(|p| p.class == "camera.CameraPlugin"));
-        let merged = merge(&active);
+    fn camera_intent_plugin_declares_queries_and_optional_feature() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "cameraintent"));
+        let active = active_plugins(&["camera-intent"]);
         assert!(
-            merged
-                .manifest
+            active
                 .iter()
-                .any(|x| x.contains("android.media.action.IMAGE_CAPTURE"))
+                .any(|p| p.class == "cameraintent.CameraIntentPlugin")
         );
-        assert!(
-            merged
-                .manifest
-                .iter()
-                .any(|x| x.contains("android:required=\"false\""))
+        assert!(!active.iter().any(|p| p.dir == "camera"));
+        // Byte for byte what the `camera` feature contributed before 0.3.0.
+        let merged = manifest_of(&["camera-intent"]);
+        assert_eq!(
+            merged.manifest,
+            [
+                "<queries><intent><action android:name=\"android.media.action.IMAGE_CAPTURE\" /></intent></queries>",
+                "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />",
+            ]
         );
         assert!(merged.permissions.is_empty());
+        assert!(merged.dependencies.is_empty() && merged.application.is_empty());
+    }
+
+    #[test]
+    fn no_camera_permission_without_the_camera_feature() {
+        for features in [
+            &[][..],
+            &["camera-intent"],
+            &["google-auth", "notifications"],
+        ] {
+            let merged = manifest_of(features);
+            assert!(
+                !merged.permissions.contains(&"android.permission.CAMERA"),
+                "{features:?}"
+            );
+            assert!(
+                !merged
+                    .manifest
+                    .iter()
+                    .any(|x| x.contains("\"android.hardware.camera\"")),
+                "{features:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn camera_plugin_declares_camera_and_optional_features() {
+        let active = active_plugins(&["camera"]);
+        assert!(active.iter().any(|p| p.class == "camera.CameraPlugin"));
+        assert!(!active.iter().any(|p| p.dir == "cameraintent"));
+        let merged = manifest_of(&["camera"]);
+        assert_eq!(merged.permissions, ["android.permission.CAMERA"]);
+        assert_eq!(
+            merged.manifest,
+            [
+                "<uses-feature android:name=\"android.hardware.camera\" android:required=\"false\" />",
+                "<uses-feature android:name=\"android.hardware.camera.autofocus\" android:required=\"false\" />",
+                "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />",
+            ]
+        );
+        assert!(merged.dependencies.is_empty() && merged.application.is_empty());
+    }
+
+    #[test]
+    fn both_camera_features_declare_camera_any_once() {
+        let merged = manifest_of(&["camera-intent", "camera"]);
+        let any = merged
+            .manifest
+            .iter()
+            .filter(|x| x.contains("android.hardware.camera.any"))
+            .count();
+        assert_eq!(any, 1);
+        assert_eq!(merged.manifest.len(), 4);
+        assert_eq!(merged.permissions, ["android.permission.CAMERA"]);
+        assert_eq!(
+            source_dirs(&active_plugins(&["camera-intent", "camera"])),
+            ["bridge", "store", "cameraintent", "camera"]
+        );
     }
 
     #[test]
