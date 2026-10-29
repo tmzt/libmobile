@@ -1049,3 +1049,13 @@ commit tagged `v0.3.1`. Not yet run on a phone.
 8. `zoom_by` during auto zoom multiplies the ratio shown (user x auto),
    then resets auto (visible to the app).
 9. The example (step 6) and the README (step 7) are not done yet.
+
+## 2026-10-28 23:42 EDT — Reading the clipboard's text (approved)
+
+Plan: `docs/design/20261028_03_CLIPBOARD_PLAN.md` (Draft). Requested
+through the flankr session for its bottom bar plan's Paste text: a
+`clipboard` feature with `android::clipboard::read_text` and `has_text`,
+read only, with Android 10's focus rule and Android 12's toast documented.
+Approved by the owner ("plan those in appropriate repos with subagent,
+then impl"); libmorph's plan of the same name wraps it. For libmobile
+0.3.2.
