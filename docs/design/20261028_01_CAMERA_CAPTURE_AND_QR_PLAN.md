@@ -944,3 +944,27 @@ Implementation has started with the camera base and single-frame capture
 (steps 1-4, in one commit). The status is `In implementation`, and the
 document is now immutable: it changes only on the owner's explicit
 instruction.
+
+## Amendment — 2026-10-29 02:25 EDT: the permission gate's routing is in the core `android::permission_gate`
+
+The media request plan (docs/design/20261028_02_MEDIA_REQUEST_PLAN.md, 4.3;
+its approval amendment of 2026-10-29, open question 4, which the owner
+approved) moves this plan's permission gate into a core module that features
+share without depending on each other; built in libmobile 0.3.4. This
+replaces, in 3.2, "a permission gate in `src/android/camera_device/gate.rs`"
+and, in its step 3, "each `PermissionsOutcome` is offered to the gate
+first":
+
+1. The camera's CAMERA request is made through
+   `android::permission_gate::request` (`src/android/permission_gate.rs`,
+   no feature), which files a waiter for its id. `pump_bridges` offers every
+   `PermissionsOutcome` to `permission_gate::offer` before delivering it as
+   `MobileEvent::Permissions`; the camera's answer goes to its waiter (which
+   posts it to the camera thread), not to the app. The platform-free table is
+   `src/permission_gate.rs`, host-tested.
+2. The camera keeps its own queue of waiting calls on its thread
+   (`src/camera/gate.rs`). Call order, `settings_only` and asking again after
+   a denial are unchanged. On `Destroy` it withdraws its request from the core
+   gate; the core table is cleared at the end of each run.
+3. `media-request` uses the same gate for CAMERA on a camera entry. Nothing
+   in 3.2's behaviour that an app can see changes.
