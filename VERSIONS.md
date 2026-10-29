@@ -219,3 +219,16 @@ with its amendment of 2026-10-28 14:46 EDT). Additive.
   `android::camera`); `CameraEvent::Qr { session, code }` (`CameraEvent` is
   `#[non_exhaustive]`). Auto zoom reports `CameraEvent::Zoom { source: Auto }`;
   `zoom_by` during auto zoom multiplies the ratio shown. No manifest change.
+
+## 0.3.2 — 2026-10-28 (tag `v0.3.2`)
+
+The clipboard's text (`docs/design/20261028_03_CLIPBOARD_PLAN.md`).
+Additive.
+
+- **Feature `clipboard`** (Kotlin `clipboard.ClipboardPlugin`; no
+  permission or manifest entry): `android::clipboard::read_text(&AndroidApp)
+  -> Result<Option<String>, ClipboardError>` and
+  `android::clipboard::has_text(&AndroidApp) -> Result<bool, ClipboardError>`;
+  `libmobile::clipboard::ClipboardError` (`#[non_exhaustive]`: `NotFocused`,
+  `Platform(String)`), also in `android::clipboard`, with `Display` and
+  `Error`. Read only.

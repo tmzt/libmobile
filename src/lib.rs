@@ -69,6 +69,8 @@ pub mod build_info;
 pub mod camera;
 #[cfg(feature = "camera-intent")]
 pub mod camera_intent;
+#[cfg(feature = "clipboard")]
+pub mod clipboard;
 pub mod codegen;
 pub mod event;
 pub mod gradle;

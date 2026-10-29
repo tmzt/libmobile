@@ -1,6 +1,6 @@
 [package]
 name = "libmobile"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
@@ -62,6 +62,9 @@ system-events = []
 # app (android/java/dev/highbay/libmobile/notify, src/android/notify.rs).
 # Adds POST_NOTIFICATIONS. With `system-events`, `SystemEvent::Notify`.
 notifications = []
+# The clipboard's text, read only (android/java/dev/highbay/libmobile/clipboard,
+# src/android/clipboard.rs): `read_text` and `has_text`. No permission.
+clipboard = []
 # `system_events::subscribe_tokio`, a tokio receiver for system events.
 tokio = ["system-events", "dep:tokio"]
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and

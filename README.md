@@ -61,6 +61,7 @@ examples/
 | `battery`     | `battery/BatteryPlugin`    | `android::battery`; a `<queries>` entry for Samsung's Device Care; with `system-events`, `SystemEvent::BatteryExemption` |
 | `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
 | `notifications` | `notify/NotifyPlugin`    | `android::notify` (alerts on the app's own channels); `MobileEvent::Notify`; `POST_NOTIFICATIONS`; with `system-events`, `SystemEvent::Notify` |
+| `clipboard`   | `clipboard/ClipboardPlugin` | `android::clipboard::read_text` and `has_text`, read only; no permission |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 | `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
@@ -383,6 +384,30 @@ if let Some(info) = libmobile::android::build_info() {
 }
 ```
 
+### Clipboard
+
+Feature `clipboard`. `android::clipboard::read_text(&app)` gives the plain
+text of the clipboard's first item, for an app's own Paste button:
+`Ok(None)` when it is empty or holds no text (an image), and
+`Err(ClipboardError::NotFocused)` while the app's window does not have
+focus, since from Android 10 only the app in front may read the
+clipboard. `has_text(&app)` says whether there is text from the clip's
+description only. From Android 12 the system shows a "pasted from your
+clipboard" toast when `read_text` reads a clip another app copied, so read
+it on the user's tap and use `has_text` to enable the button. Any thread;
+read only; libmobile never logs the text.
+
+```rust
+use libmobile::android::clipboard;
+
+if clipboard::has_text(&app).unwrap_or(false) {
+    // On the user's Paste tap:
+    if let Ok(Some(text)) = clipboard::read_text(&app) {
+        insert(&text);
+    }
+}
+```
+
 ### System events
 
 With the `system-events` feature, any thread can follow what happens to the
@@ -512,6 +537,8 @@ At start it logs the files and cache directories (`android::dirs`) and
 whether the files directory is `internal_data_path()`, and the build info
 (`android::build_info`). It logs each `MobileEvent::TrimMemory`
 (`adb shell am send-trim-memory dev.highbay.libmobile.example.wgpu UI_HIDDEN`).
+`--es cmd clipboard` logs `android::clipboard::has_text` and the length
+of `read_text`'s text, never the text.
 
 ## Development
 
@@ -559,4 +586,4 @@ dual licensed as above, without any additional terms or conditions.
 | [Soft keyboard options, the action key and dismissal](docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md) | 2026-10-24 | Draft | `TextInputOptions` for the hidden field, `MobileEvent::TextAction` and `MobileEvent::TextInputDismissed`. Approved; not yet started. |
 | [Single-frame camera capture and QR scanning with auto zoom](docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md) | 2026-10-28 | In implementation | An in-process NDK camera that asks for CAMERA only on first use, one still frame (`camera-capture`), and QR scanning with rqrr, auto zoom around the app's pinch zoom, and exposure that steps down for screens (`camera-qr`); `camera` is the in-process base and the system camera app hand-off becomes `camera-intent` (0.3.0, breaking). Approved; in implementation. |
 | [Asking the user for a photo or video through Android's own chooser](docs/design/20261028_02_MEDIA_REQUEST_PLAN.md) | 2026-10-28 | Draft | A `media-request` feature: `ACTION_GET_CONTENT` in the system chooser with optional camera entries writing full size through libmobile's own content provider (no AndroidX), or the Photo Picker; the items' bytes or cache files in `MobileEvent::Media`; CAMERA asked for only when the manifest declares it and the camera entry is wanted. Proposed; awaiting the owner. |
-| [Reading the clipboard's text](docs/design/20261028_03_CLIPBOARD_PLAN.md) | 2026-10-28 | Draft | A `clipboard` feature: `android::clipboard::read_text` (the first item's text, `NotFocused` when Android 10's focus rule would hide it) and `has_text` (no Android 12 toast), read only. Approved; not yet started. |
+| [Reading the clipboard's text](docs/design/20261028_03_CLIPBOARD_PLAN.md) | 2026-10-28 | In implementation | A `clipboard` feature: `android::clipboard::read_text` (the first item's text, `NotFocused` when Android 10's focus rule would hide it) and `has_text` (no Android 12 toast), read only. Being built on the owner's approval. |

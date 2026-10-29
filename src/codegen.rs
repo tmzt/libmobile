@@ -253,6 +253,14 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
+    // The clipboard's text, read only (`clipboard/`,
+    // `src/android/clipboard.rs`). No permission or manifest entry.
+    Plugin {
+        feature: Some("clipboard"),
+        dir: "clipboard",
+        class: "clipboard.ClipboardPlugin",
+        contributes: Contributes::NOTHING,
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -1053,6 +1061,7 @@ mod tests {
                 "battery",
                 "system-events",
                 "notifications",
+                "clipboard",
                 "secure-store-no-strongbox"
             ]
         );
@@ -1181,6 +1190,19 @@ mod tests {
             ["<queries><package android:name=\"com.samsung.android.lool\" /></queries>"]
         );
         assert!(merged.permissions.is_empty());
+    }
+
+    #[test]
+    fn clipboard_plugin_is_feature_gated_and_contributes_nothing() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "clipboard"));
+        let active = active_plugins(&["clipboard"]);
+        let plugin = active
+            .iter()
+            .find(|p| p.dir == "clipboard")
+            .expect("the clipboard plugin");
+        assert_eq!(plugin.class, "clipboard.ClipboardPlugin");
+        assert_eq!(merge(&[*plugin]), Merged::default());
+        assert!(source_dirs(&active).contains(&"clipboard"));
     }
 
     #[test]

@@ -1,7 +1,7 @@
 ---
 title: Reading the clipboard's text
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Feature `clipboard`: `android::clipboard::read_text(&AndroidApp) ->
     Result<Option<String>, ClipboardError>` and `has_text(&AndroidApp) ->
@@ -205,3 +205,7 @@ flankr's bottom bar plan needs, on 2026-10-28, through the flankr lead
 This plan and libmorph's `docs/design/20261028_03_CLIPBOARD_PLAN.md` are
 built together, libmobile first, for libmobile 0.3.2 and libmorph 0.5.1.
 The status stays `Draft` until the first commit that implements it.
+
+## Amendment — 2026-10-28 23:44 EDT: implementation has started; the document is now immutable
+
+Step 1 (the feature) is the first implementing commit.
