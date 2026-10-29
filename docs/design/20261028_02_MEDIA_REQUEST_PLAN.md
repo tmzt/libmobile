@@ -1,7 +1,7 @@
 ---
 title: Asking the user for a photo or video through Android's own chooser
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Feature `media-request`: one call that opens Android's chooser for
     media (`ACTION_GET_CONTENT` in `Intent.createChooser`), with an
@@ -792,3 +792,12 @@ by an amendment when built; (5) no video options yet; (6) no
 `cancel_media`; (7) no `Delivery::Uri`. Its version is the next free
 patch at its commit (0.3.4 as of now). The status stays `Draft` until the
 first implementing commit (Rule 1.5).
+
+## Amendment — 2026-10-29 02:10 EDT: implementation has started; the document is now immutable
+
+Steps 1 to 5 are the first implementing commit, together with step 7
+(README) and the release, as libmobile 0.3.4, per the approval amendment
+of 2026-10-29 01:53 EDT. The core permission gate of 4.3 is built in this
+commit and the in-process camera is moved onto it (the camera plan's gate
+was built first). Step 6's example and its S23 checks are not done; the
+departures are recorded in `CHANGES.md`.

@@ -92,6 +92,11 @@ impl Plugin {
 const CAMERA_ANY_OPTIONAL: &str =
     "<uses-feature android:name=\"android.hardware.camera.any\" android:required=\"false\" />";
 
+/// Package visibility for the camera apps (`ACTION_IMAGE_CAPTURE`):
+/// contributed by `camera-intent` and `media-request`, deduplicated by
+/// [`merge`].
+const IMAGE_CAPTURE_QUERY: &str = "<queries><intent><action android:name=\"android.media.action.IMAGE_CAPTURE\" /></intent></queries>";
+
 /// Every plugin the crate ships, in dispatch order. Core bridges come first so
 /// a feature plugin's `onCreate` can rely on insets/intents already being wired.
 pub const PLUGINS: &[Plugin] = &[
@@ -173,7 +178,7 @@ pub const PLUGINS: &[Plugin] = &[
             manifest: &[
                 // Package visibility (API 30+): lets the plugin see that a
                 // camera app exists to hand off to.
-                "<queries><intent><action android:name=\"android.media.action.IMAGE_CAPTURE\" /></intent></queries>",
+                IMAGE_CAPTURE_QUERY,
                 // Optional: the plugin degrades to `no_camera_app`, so Play
                 // must not filter camera-less devices out.
                 CAMERA_ANY_OPTIONAL,
@@ -199,6 +204,29 @@ pub const PLUGINS: &[Plugin] = &[
                 // The same string as `camera-intent`'s, so `merge` emits it
                 // once when both are on.
                 CAMERA_ANY_OPTIONAL,
+            ],
+            ..Contributes::NOTHING
+        },
+    },
+    // Media requests (`media/`, `src/android/media.rs`). The provider gives
+    // the camera app a URI to write a full-size photo or video into the
+    // app's cache; `${applicationId}` is filled in by the manifest task.
+    // No permission: CAMERA is asked for only when something else declared
+    // it.
+    Plugin {
+        feature: Some("media-request"),
+        dir: "media",
+        class: "media.MediaRequestPlugin",
+        contributes: Contributes {
+            manifest: &[
+                // Package visibility (API 30+): the camera apps the chooser's
+                // camera entries are built from. The first string is
+                // `camera-intent`'s own, so `merge` emits it once with both.
+                IMAGE_CAPTURE_QUERY,
+                "<queries><intent><action android:name=\"android.media.action.VIDEO_CAPTURE\" /></intent></queries>",
+            ],
+            application: &[
+                "<provider android:name=\"dev.highbay.libmobile.media.MediaFileProvider\" android:authorities=\"${applicationId}.libmobile.media\" android:exported=\"false\" android:grantUriPermissions=\"true\" />",
             ],
             ..Contributes::NOTHING
         },
@@ -430,6 +458,10 @@ abstract class LibmobileManifestTask extends DefaultTask {
     @Input abstract ListProperty<String> getPermissions()
     @Input abstract ListProperty<String> getManifestXml()
     @Input abstract ListProperty<String> getApplicationXml()
+    // `${applicationId}` in an `<application>` contribution (a provider's
+    // authority): the merged manifest has had its placeholders replaced
+    // already, so the task replaces this one itself.
+    @Input abstract Property<String> getApplicationId()
 
     @TaskAction
     void splice() {
@@ -445,7 +477,8 @@ abstract class LibmobileManifestTask extends DefaultTask {
             if (at < 0) throw new GradleException('libmobile: merged manifest has no <application>')
             text = text.substring(0, at) + root.trim() + '\n\n    ' + text.substring(at)
         }
-        def app = applicationXml.get().collect { "        ${it}\n" }.join('')
+        def appXml = applicationXml.get().collect { it.replace('${applicationId}', applicationId.get()) }
+        def app = appXml.collect { "        ${it}\n" }.join('')
         if (app) {
             def at = text.lastIndexOf('</application>')
             if (at < 0) throw new GradleException('libmobile: merged manifest has no </application>')
@@ -461,6 +494,7 @@ androidComponents {
             permissions.set(LIBMOBILE_PERMISSIONS)
             manifestXml.set(LIBMOBILE_MANIFEST_XML)
             applicationXml.set(LIBMOBILE_APPLICATION_XML)
+            applicationId.set(variant.applicationId)
         }
         def mergedManifest = variant.artifacts.getClass().classLoader
             .loadClass('com.android.build.api.artifact.SingleArtifact$MERGED_MANIFEST').INSTANCE
@@ -1065,6 +1099,7 @@ mod tests {
                 "google-auth",
                 "camera-intent",
                 "camera",
+                "media-request",
                 "foreground-service",
                 "battery",
                 "system-events",
@@ -1493,6 +1528,73 @@ mod tests {
             source_dirs(&active_plugins(&["camera-intent", "camera"])),
             ["bridge", "store", "cameraintent", "camera"]
         );
+    }
+
+    const VIDEO_CAPTURE_QUERY: &str = "<queries><intent><action android:name=\"android.media.action.VIDEO_CAPTURE\" /></intent></queries>";
+    const MEDIA_PROVIDER: &str = "<provider android:name=\"dev.highbay.libmobile.media.MediaFileProvider\" android:authorities=\"${applicationId}.libmobile.media\" android:exported=\"false\" android:grantUriPermissions=\"true\" />";
+
+    #[test]
+    fn media_request_contributes_provider_and_queries_only_with_its_feature() {
+        let all_but_media: Vec<&str> = known_features()
+            .into_iter()
+            .filter(|f| *f != "media-request")
+            .collect();
+        for features in [&[][..], &["camera-intent"], &["camera"], &all_but_media] {
+            let merged = manifest_of(features);
+            assert!(
+                merged
+                    .application
+                    .iter()
+                    .all(|x| !x.contains("MediaFileProvider"))
+            );
+            assert!(
+                !merged.manifest.contains(&VIDEO_CAPTURE_QUERY),
+                "{features:?}"
+            );
+            assert!(!source_dirs(&active_plugins(features)).contains(&"media"));
+        }
+        let active = active_plugins(&["media-request"]);
+        assert!(active.iter().any(|p| p.class == "media.MediaRequestPlugin"));
+        assert!(source_dirs(&active).contains(&"media"));
+        let merged = manifest_of(&["media-request"]);
+        assert_eq!(merged.manifest, [IMAGE_CAPTURE_QUERY, VIDEO_CAPTURE_QUERY]);
+        assert_eq!(merged.application, [MEDIA_PROVIDER]);
+        assert!(
+            merged.permissions.is_empty(),
+            "no <uses-permission> of its own"
+        );
+        assert!(merged.dependencies.is_empty(), "no AndroidX");
+    }
+
+    #[test]
+    fn media_request_and_camera_intent_query_image_capture_once() {
+        let merged = manifest_of(&["camera-intent", "media-request"]);
+        let image = merged
+            .manifest
+            .iter()
+            .filter(|x| x.contains("android.media.action.IMAGE_CAPTURE"))
+            .count();
+        assert_eq!(image, 1);
+        assert!(merged.manifest.contains(&VIDEO_CAPTURE_QUERY));
+        assert!(merged.permissions.is_empty());
+        // With the in-process camera, CAMERA comes from `camera` only.
+        let merged = manifest_of(&["camera", "media-request"]);
+        assert_eq!(merged.permissions, ["android.permission.CAMERA"]);
+    }
+
+    #[test]
+    fn gradle_script_replaces_application_id_in_application_xml() {
+        let enabled = ["media-request"];
+        let script = gradle_script(&enabled, Path::new("/t/java"), &manifest_of(&enabled));
+        // The contribution keeps the placeholder (single-quoted: Groovy does
+        // not interpolate it) and the task replaces it with the variant's id.
+        assert!(script.contains("android:authorities=\"${applicationId}.libmobile.media\""));
+        assert!(script.contains("@Input abstract Property<String> getApplicationId()\n"));
+        assert!(script.contains(
+            "def appXml = applicationXml.get().collect { it.replace('${applicationId}', applicationId.get()) }\n"
+        ));
+        assert!(script.contains("        def app = appXml.collect {"));
+        assert!(script.contains("            applicationId.set(variant.applicationId)\n"));
     }
 
     #[test]

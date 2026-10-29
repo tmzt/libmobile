@@ -83,10 +83,13 @@ pub mod intent;
 pub mod key_store;
 pub mod link;
 pub mod mailbox;
+#[cfg(feature = "media-request")]
+pub mod media;
 #[cfg(any(feature = "foreground-service", feature = "notifications"))]
 mod notification;
 #[cfg(feature = "notifications")]
 pub mod notify;
+mod permission_gate;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]
 pub mod service;

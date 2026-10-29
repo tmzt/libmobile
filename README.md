@@ -40,6 +40,7 @@ android/java/dev/highbay/libmobile/
   battery/                  feature "battery": battery optimization and the battery settings pages
   events/                   feature "system-events": visibility, network and Doze callbacks
   image/                    feature "image-codec": ImageDecoder and Bitmap.compress
+  media/                    feature "media-request": the system chooser or Photo Picker, and a provider for camera output
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
   gradle.rs                 generates the Gradle project from the app's build.rs
@@ -64,6 +65,7 @@ examples/
 | `notifications` | `notify/NotifyPlugin`    | `android::notify` (alerts on the app's own channels); `MobileEvent::Notify`; `POST_NOTIFICATIONS`; with `system-events`, `SystemEvent::Notify` |
 | `clipboard`   | `clipboard/ClipboardPlugin` | `android::clipboard::read_text` and `has_text`, read only; no permission |
 | `image-codec` | `image/ImageCodecPlugin`   | `android::image_codec::probe_image`, `decode_image` and `encode_image` through Android's own codecs; no permission or manifest entry |
+| `media-request` | `media/MediaRequestPlugin` | `android::media::request_media` (the system chooser with optional camera entries, or the Photo Picker); `MobileEvent::Media`; `<queries>` for `IMAGE_CAPTURE` and `VIDEO_CAPTURE` and a private `<provider>` (`MediaFileProvider`, authority `<applicationId>.libmobile.media`); no permission of its own |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 | `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
@@ -439,6 +441,51 @@ let encoding = if image.is_opaque() { Encoding::Jpeg { quality: 90 } } else { En
 let upload = image_codec::encode_image(&image, encoding)?;
 ```
 
+### Asking for a photo or video
+
+Feature `media-request`: one call opens Android's own chooser for media
+(`ACTION_GET_CONTENT` in `Intent.createChooser`: the gallery, Files,
+Drive...) with optional camera entries, or the system Photo Picker. No
+AndroidX: a content provider of libmobile's own lets the camera app write a
+full-size photo or video into `cache_dir()/libmobile-media/`.
+
+`android::media::request_media(&app, &request)` returns a `MediaRequestId`
+at once; the answer is `MobileEvent::Media(MediaResponse)`. A
+`MediaRequest` (start from `MediaRequest::default()`) sets the `kind`
+(`Images` by default, `Videos`, `ImagesAndVideos`, `Any`, `Mime(list)`),
+the `camera` entry (`None`, `Photo`, `Video`, `PhotoAndVideo`), the
+`picker` (`Chooser`, or `PhotoPicker` when there is no camera entry, the kind
+is images and/or videos and the device has it, API 33+ or API 30+ with the
+SDK extension; otherwise the chooser, and `MediaReply::picker` says which),
+`max_items` (1 to 100), `max_bytes` per item (32 MiB by default) and the
+`delivery`: `Bytes` in memory, or a `File` in the cache for the app to move
+(left-over files are deleted after 24 hours). Each `MediaItem` carries its
+`source` (`Picked` or `Camera`), URI, MIME type, display name, size, JPEG
+EXIF orientation (the pixels are not rotated) and `data` (`Bytes`, `File`,
+`TooLarge`, `Unreadable`). Errors: `Cancelled`, `Busy` (one request at a
+time), `NoApp`, `NotVisible`, `PermissionDenied { settings_only }`,
+`Failed`. An answer after the activity or the process was recreated has
+`request: None`.
+
+The manifest gets no permission. When the app's manifest declares CAMERA
+(the in-process `camera` feature does), Android refuses the camera app
+until it is granted, so a request with a camera entry asks for CAMERA first
+(`CameraPermission::Ask`; a refusal fails the request and no chooser
+opens), or leaves the camera entry out (`IfGranted`, `camera_left_out`).
+The answer to that dialog is not delivered as `MobileEvent::Permissions`.
+
+```rust
+use libmobile::android::media::{self, CameraEntry, MediaData, MediaRequest};
+
+let mut request = MediaRequest::default();
+request.camera = CameraEntry::Photo;
+let id = media::request_media(&app, &request);
+// Later, in `MobileApp::event`:
+// MobileEvent::Media(response) if response.request == Some(id) => {
+//     for item in response.result?.items { if let MediaData::Bytes(jpeg) = item.data { ... } }
+// }
+```
+
 ### System events
 
 With the `system-events` feature, any thread can follow what happens to the
@@ -572,7 +619,10 @@ whether the files directory is `internal_data_path()`, and the build info
 of `read_text`'s text, never the text. `--es cmd image-codec` probes,
 decodes (full size and at 2048, timed) and re-encodes as JPEG 90 and PNG
 every file in the app's `cache/codec-test/` (copied in with `adb push` and
-`run-as ... cp`), logging each result.
+`run-as ... cp`), logging each result. `--es cmd media-pick`,
+`media-multi`, `media-camera`, `media-video`, `media-photo-picker` and
+`media-small` each make one `android::media::request_media` call, and each
+`MobileEvent::Media` is logged without its URIs or names.
 
 ## Development
 
@@ -619,6 +669,6 @@ dual licensed as above, without any additional terms or conditions.
 | [The system's night mode](docs/design/20261024_05_NIGHT_MODE_PLAN.md) | 2026-10-24 | In implementation | `android::night_mode` from the configuration's `uiMode`, and the system bars' icons set from Rust. Released in 0.2.6; the device checks are still open. |
 | [Soft keyboard options, the action key and dismissal](docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md) | 2026-10-24 | Draft | `TextInputOptions` for the hidden field, `MobileEvent::TextAction` and `MobileEvent::TextInputDismissed`. Approved; not yet started. |
 | [Single-frame camera capture and QR scanning with auto zoom](docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md) | 2026-10-28 | In implementation | An in-process NDK camera that asks for CAMERA only on first use, one still frame (`camera-capture`), and QR scanning with rqrr, auto zoom around the app's pinch zoom, and exposure that steps down for screens (`camera-qr`); `camera` is the in-process base and the system camera app hand-off becomes `camera-intent` (0.3.0, breaking). Approved; in implementation. |
-| [Asking the user for a photo or video through Android's own chooser](docs/design/20261028_02_MEDIA_REQUEST_PLAN.md) | 2026-10-28 | Draft | A `media-request` feature: `ACTION_GET_CONTENT` in the system chooser with optional camera entries writing full size through libmobile's own content provider (no AndroidX), or the Photo Picker; the items' bytes or cache files in `MobileEvent::Media`; CAMERA asked for only when the manifest declares it and the camera entry is wanted. Proposed; awaiting the owner. |
+| [Asking the user for a photo or video through Android's own chooser](docs/design/20261028_02_MEDIA_REQUEST_PLAN.md) | 2026-10-28 | In implementation | A `media-request` feature: `ACTION_GET_CONTENT` in the system chooser with optional camera entries writing full size through libmobile's own content provider (no AndroidX), or the Photo Picker; the items' bytes or cache files in `MobileEvent::Media`; CAMERA asked for only when the manifest declares it and the camera entry is wanted, through a core permission gate the camera now shares. Approved; built as 0.3.4, its S23 checks open. |
 | [Reading the clipboard's text](docs/design/20261028_03_CLIPBOARD_PLAN.md) | 2026-10-28 | In implementation | A `clipboard` feature: `android::clipboard::read_text` (the first item's text, `NotFocused` when Android 10's focus rule would hide it) and `has_text` (no Android 12 toast), read only. Being built on the owner's approval. |
 | [Viewing and sharing the app's files, receiving shares, and decoding images through Android](docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md) | 2026-10-28 | In implementation | Three features, no permissions and no Jetpack: `share-out` (a read-only provider of libmobile's own for `cache_dir()/libmobile-share/`, `view_file` and `share_file` in the system chooser, `prune`), `share-target` (the app as an `ACTION_SEND`/`SEND_MULTIPLE` target for `image/*` and `text/plain`, a translucent receiver copying the streams under a cap while it holds the grant, `MobileEvent::Shared`) and `image-codec` (`decode_image` through `ImageDecoder` with EXIF rotation and HEIC, `encode_image` through `Bitmap.compress`, `probe_image`). Approved; `image-codec` built on its own first (0.3.3), the two sharing features wait for the owner. |

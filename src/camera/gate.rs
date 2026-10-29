@@ -5,8 +5,9 @@
 //! 2. Otherwise the call waits; if no camera request is in flight, one is
 //!    made (`request_permissions(CAMERA)`), and the gate remembers its id.
 //!    Every later call waits for the same answer.
-//! 3. The main loop offers each permission answer to the gate first; the
-//!    gate's own is consumed (not delivered as `MobileEvent::Permissions`).
+//! 3. The main loop offers each permission answer to the core gate
+//!    (`android::permission_gate`, shared with `media-request`) first; the
+//!    camera's own is consumed (not delivered as `MobileEvent::Permissions`).
 //!    Granted: every waiting call proceeds, in the order made. Denied: every
 //!    waiting call fails with `PermissionDenied { settings_only }`, where
 //!    `settings_only` is `!should_show_rationale(CAMERA)` read after the
@@ -74,7 +75,6 @@ impl<T> Gate<T> {
     }
 
     /// The request in flight, if any.
-    #[cfg(test)]
     pub(crate) fn in_flight(&self) -> Option<u32> {
         self.request
     }

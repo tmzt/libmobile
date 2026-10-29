@@ -31,6 +31,7 @@ use super::ndk::{
 use super::qr::{self, QrState};
 use crate::MobileEvent;
 use crate::android::jni_util::with_app_class;
+use crate::android::permission_gate;
 #[cfg(feature = "camera-capture")]
 use crate::camera::PREVIEW_MAX;
 use crate::camera::convert::{self, Planes};
@@ -51,7 +52,7 @@ use crate::camera::{
     CaptureId, CaptureOptions, Frame, FrameFormat, Resolution,
     capture::{Captures, Phase},
 };
-use crate::event::{PermissionRequest, PermissionsOutcome};
+use crate::event::PermissionRequest;
 use crate::mailbox::Mailbox;
 
 const PLUGIN_CLASS: &str = "dev.highbay.libmobile.camera.CameraPlugin";
@@ -143,9 +144,6 @@ pub(super) enum NdkEvent {
 static TX: OnceLock<Sender<Msg>> = OnceLock::new();
 static EVENTS: Mailbox<CameraEvent> = Mailbox::new();
 static WAKER: Mutex<Option<AndroidAppWaker>> = Mutex::new(None);
-/// The gate's request in flight, for routing its answer
-/// ([`offer_permission`]).
-static GATE_REQUEST: Mutex<Option<PermissionRequest>> = Mutex::new(None);
 /// Whether the activity is resumed; kept even while the thread is not
 /// running, so it starts knowing.
 static RESUMED: AtomicBool = AtomicBool::new(false);
@@ -241,21 +239,6 @@ pub(super) fn lifecycle(app: &AndroidApp, event: &MobileEvent) {
         }
         _ => {}
     }
-}
-
-pub(super) fn offer_permission(outcome: PermissionsOutcome) -> Option<PermissionsOutcome> {
-    let mut slot = lock(&GATE_REQUEST);
-    if *slot != Some(outcome.request) {
-        return Some(outcome);
-    }
-    *slot = None;
-    let granted = outcome.granted(CAMERA_PERMISSION);
-    log::info!("libmobile: camera permission granted: {granted}");
-    post_if_running(Msg::Permission {
-        request: outcome.request.id(),
-        granted,
-    });
-    None
 }
 
 pub(super) fn take_events() -> Vec<CameraEvent> {
@@ -686,11 +669,20 @@ impl Worker {
         let Some(app) = self.app.clone() else {
             return;
         };
-        // Held across the request, so an answer the main loop drains at once
-        // (a failed JNI call answers immediately) is still routed here.
-        let mut slot = lock(&GATE_REQUEST);
-        let request = crate::android::request_permissions(&app, &[CAMERA_PERMISSION]);
-        *slot = Some(request);
+        // The answer comes back through the core gate, on the main loop, and
+        // is not delivered to the app as `MobileEvent::Permissions`.
+        let request = permission_gate::request(
+            &app,
+            &[CAMERA_PERMISSION],
+            Box::new(|_, outcome| {
+                let granted = outcome.granted(CAMERA_PERMISSION);
+                log::info!("libmobile: camera permission granted: {granted}");
+                post_if_running(Msg::Permission {
+                    request: outcome.request.id(),
+                    granted,
+                });
+            }),
+        );
         self.gate.asked(request.id());
         log::info!(
             "libmobile: camera permission asked (request {})",
@@ -835,8 +827,10 @@ impl Worker {
         self.session = None;
         #[cfg(feature = "camera-capture")]
         let _ = self.captures.drain();
+        if let Some(request) = self.gate.in_flight() {
+            permission_gate::withdraw(PermissionRequest(request));
+        }
         self.gate.clear();
-        *lock(&GATE_REQUEST) = None;
         reset_shared(None);
         *lock(&WAKER) = None;
         self.app = None;

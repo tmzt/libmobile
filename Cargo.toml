@@ -1,6 +1,6 @@
 [package]
 name = "libmobile"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
@@ -70,6 +70,12 @@ clipboard = []
 # `probe_image`, `decode_image` (ImageDecoder: EXIF orientation, HEIC/HEIF)
 # and `encode_image` (Bitmap.compress, JPEG or PNG). No permission.
 image-codec = []
+# Ask the user for media through Android's chooser (gallery, files, and an
+# optional camera entry) or the Photo Picker
+# (android/java/dev/highbay/libmobile/media, src/android/media.rs). Adds a
+# private content provider for camera output and `<queries>` for the
+# camera apps; no permission of its own.
+media-request = []
 # `system_events::subscribe_tokio`, a tokio receiver for system events.
 tokio = ["system-events", "dep:tokio"]
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and

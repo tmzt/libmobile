@@ -254,3 +254,38 @@ amendment of 2026-10-29 00:07 EDT: `image-codec` only; `share-out` and
   `Unsupported`, `Malformed`, `Incomplete`, `TooLarge { width, height }`,
   `BadInput(&'static str)`, `OutOfMemory`, `Platform(String)`), with
   `Display` and `Error`.
+
+## 0.3.4 — 2026-10-29 (tag `v0.3.4`)
+
+Asking the user for a photo, a video or a file through Android's own
+chooser (`docs/design/20261028_02_MEDIA_REQUEST_PLAN.md`). Additive.
+
+- **Feature `media-request`** (Kotlin `media.MediaRequestPlugin` and
+  `media.MediaFileProvider`; no permission; adds `<queries>` for
+  `IMAGE_CAPTURE` and `VIDEO_CAPTURE` and a non-exported `<provider>` with
+  the authority `<applicationId>.libmobile.media`):
+  `android::media::request_media(&AndroidApp, &MediaRequest) ->
+  MediaRequestId` and `android::media::photo_picker_available(&AndroidApp)
+  -> bool`; `MobileEvent::Media(MediaResponse)` (`MobileEvent` is
+  `#[non_exhaustive]`). `libmobile::media::{MediaRequestId, MediaKind,
+  CameraEntry, CameraPermission, Picker, Delivery, MediaRequest,
+  MediaSource, MediaData, MediaItem, MediaReply, MediaError,
+  MediaResponse}`, also in `android::media`: `MediaRequestId` (`id()`);
+  `MediaKind` (`#[non_exhaustive]`: `Images`, `Videos`, `ImagesAndVideos`,
+  `Any`, `Mime(Vec<String>)`); `CameraEntry` (`#[non_exhaustive]`: `None`,
+  `Photo`, `Video`, `PhotoAndVideo`); `CameraPermission`
+  (`#[non_exhaustive]`: `Ask`, `IfGranted`); `Picker` (`#[non_exhaustive]`:
+  `Chooser`, `PhotoPicker`); `Delivery` (`#[non_exhaustive]`: `Bytes`,
+  `File`); `MediaRequest` (`#[non_exhaustive]`, `Default`: `kind`, `camera`,
+  `camera_permission`, `picker`, `max_items`, `max_bytes`, `delivery`,
+  `title`); `MediaSource` (`Picked`, `Camera`); `MediaData`
+  (`#[non_exhaustive]`: `Bytes`, `File`, `TooLarge { size }`,
+  `Unreadable`); `MediaItem` and `MediaReply` (`#[non_exhaustive]`);
+  `MediaError` (`#[non_exhaustive]`: `Cancelled`, `Busy`, `NoApp`,
+  `NotVisible`, `PermissionDenied { settings_only }`, `Failed(String)`),
+  with `Display` and `Error`; `MediaResponse` (`#[non_exhaustive]`:
+  `request: Option<MediaRequestId>`, `result`). Constants `MEDIA_MAX_BYTES`,
+  `MEDIA_MAX_ITEMS`, `MEDIA_COPY_CHUNK`, `MEDIA_CACHE_MAX_AGE`, `MEDIA_DIR`.
+- The generated `libmobile.gradle` manifest task replaces
+  `${applicationId}` in `<application>` contributions. The manifest of an
+  app without `media-request` is unchanged.

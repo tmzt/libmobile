@@ -176,6 +176,10 @@ pub enum MobileEvent {
     /// system-event subscribers under `system-events`.
     #[cfg(feature = "notifications")]
     Notify(crate::notify::NotifyEvent),
+    /// The answer to an `android::media::request_media` call
+    /// (`media-request`).
+    #[cfg(feature = "media-request")]
+    Media(crate::media::MediaResponse),
     /// The user answered a
     /// [`request_permissions`](crate::android::request_permissions) call.
     Permissions(PermissionsOutcome),

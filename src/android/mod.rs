@@ -40,11 +40,14 @@ mod insets;
 mod intent;
 mod jni_util;
 pub mod link;
+#[cfg(feature = "media-request")]
+pub mod media;
 #[cfg(any(feature = "foreground-service", feature = "notifications"))]
 mod notification;
 #[cfg(feature = "notifications")]
 pub mod notify;
 mod permission;
+mod permission_gate;
 pub mod secure_store;
 #[cfg(feature = "foreground-service")]
 pub mod service;
@@ -127,6 +130,8 @@ pub fn finish(app: &AndroidApp) {
 /// `android_main`.
 pub fn run<A: MobileApp>(app: AndroidApp, mut handler: A) {
     log::info!("libmobile: main loop start");
+    #[cfg(feature = "media-request")]
+    media::begin_run();
     loop {
         let mut deferred: Vec<MobileEvent> = Vec::new();
         let mut destroy = false;
@@ -204,13 +209,16 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
         handler.event(app, MobileEvent::Capture(outcome));
     }
     for outcome in permission::take_results() {
-        // The camera's own CAMERA request is answered to its gate, not to
-        // the app.
-        #[cfg(feature = "camera")]
-        let Some(outcome) = camera::offer_permission(outcome) else {
+        // A feature's own request (the camera's or a media request's CAMERA)
+        // is answered to its waiter at the gate, not to the app.
+        let Some(outcome) = permission_gate::offer(app, outcome) else {
             continue;
         };
         handler.event(app, MobileEvent::Permissions(outcome));
+    }
+    #[cfg(feature = "media-request")]
+    for response in media::take_results() {
+        handler.event(app, MobileEvent::Media(response));
     }
     #[cfg(feature = "camera")]
     for event in camera::take_events() {
@@ -254,6 +262,12 @@ fn discard_stale_commands() {
     #[cfg(feature = "camera")]
     let _ = camera::take_events();
     let _ = permission::take_results();
+    #[cfg(feature = "media-request")]
+    {
+        media::end_run();
+        let _ = media::take_results();
+    }
+    permission_gate::clear();
     #[cfg(feature = "foreground-service")]
     let _ = service::take_events();
     #[cfg(feature = "notifications")]

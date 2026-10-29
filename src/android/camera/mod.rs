@@ -52,7 +52,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use android_activity::AndroidApp;
 
 use crate::MobileEvent;
-use crate::event::PermissionsOutcome;
 use worker::{Msg, ZoomChange};
 
 /// The permission the camera needs.
@@ -167,12 +166,6 @@ pub(crate) fn gate_intent(app: &AndroidApp) {
 /// runs).
 pub(crate) fn lifecycle(app: &AndroidApp, event: &MobileEvent) {
     worker::lifecycle(app, event);
-}
-
-/// Offer a permission answer to the gate: `None` if it was the gate's
-/// (consumed), else the outcome back for `MobileEvent::Permissions`.
-pub(crate) fn offer_permission(outcome: PermissionsOutcome) -> Option<PermissionsOutcome> {
-    worker::offer_permission(outcome)
 }
 
 pub(crate) fn take_events() -> Vec<CameraEvent> {
