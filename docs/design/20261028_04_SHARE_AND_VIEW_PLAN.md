@@ -899,3 +899,16 @@ evidence under `out/share/<YYYYMMDD_NN_name>/`.
 6. **`share_files`.** Sharing several files out at once
    (`ACTION_SEND_MULTIPLE`) is not planned; flankr shares one. Add it now
    or when needed?
+
+## Amendment — 2026-10-29 00:07 EDT: approved; image-codec built now, sharing later
+
+The owner (2026-10-29): "approve and build the share and view plan, just
+clipboard on Mac leave out sharing for now", then, of the lead's readings,
+"Build image-codec only; no sharing yet". The plan is approved. Only the
+`image-codec` feature is built now (its step, with the README and the
+release step for it): `decode_image`, `encode_image` and `probe_image`.
+`share-out` and `share-target` are not built until the owner asks, so
+open questions 1, 2, 3, 5 and 6 (all about sharing) stay open; question 4
+is answered: `image-codec` ships on its own first. Its version is the next
+free patch (0.3.3). The status stays `Draft` until the first implementing
+commit (Rule 1.5).
