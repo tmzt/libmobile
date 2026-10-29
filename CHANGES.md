@@ -1192,3 +1192,33 @@ libmorph's plan of the same name wraps it. For libmobile 0.3.5, or the
 next free patch.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-29 17:38 EDT — Clipboard write: the S23 check (step 3)
+
+Plan: `docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md`, step 3. On the
+owner's Samsung S23 Ultra (SM-S918U, Android 16, API 36, One UI), over
+adb, with the example from step 2 installed and brought to the front by
+`adb shell am start` (the phone was awake and unlocked; nothing on it was
+touched), the plan's script exits 0. The log has
+`clipboard write_text Ok(Copied { system_notice: true })`,
+`clipboard has_text Ok(true)` and `clipboard read_text Ok(Some(29
+bytes))`, and the whole `adb logcat -d` (about 2,350 lines) never contains
+`libmobile-clipboard-check-29Q`.
+
+What the S23's confirmation is, from the system log: One UI does not
+draw AOSP's clipboard overlay. Its SystemUI shows a plain toast
+(`SemClipboardToastController: Copy toast is shown`, from
+`com.android.systemui.clipboardoverlay.ClipboardListener.showCopyToast`)
+once, right after the write, and logs that the clip's label (the app's
+name) is set. No toast is shown for the read that follows (it reads the
+example's own clip), and Samsung's clipboard service logs no "pasted"
+notice. So `system_notice: true` holds on One UI too: the system confirms
+the copy itself.
+
+Not verified, left for the owner to look at (they need the screen): the
+toast's wording on screen, and pasting in another app to see
+`libmobile-clipboard-check-29Q`. The plan's other Done when items hold.
+
+No departures from the plan in steps 1 and 2; its open questions took
+the body's defaults on the owner's approval (the plan's amendment).
+
