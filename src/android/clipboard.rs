@@ -1,22 +1,24 @@
-//! Reading the clipboard's text (`clipboard/ClipboardPlugin.kt`, feature
-//! `clipboard`).
+//! The clipboard's text, read and written (`clipboard/ClipboardPlugin.kt`,
+//! feature `clipboard`).
 //!
 //! [`read_text`] gives the plain text of the clipboard's first item, for an
 //! app's own Paste button; [`has_text`] says whether there is any, for
 //! enabling that button. Both may be called from any thread and take the
 //! activity, whose window focus Android 10 and later require (see
-//! [`ClipboardError::NotFocused`]). Read only; libmobile never logs the text
-//! or its length.
+//! [`ClipboardError::NotFocused`]). [`write_text`] puts plain text on the
+//! clipboard, for an app's own Copy button, from any thread, with no
+//! permission and no focus rule. libmobile never logs the text or its
+//! length.
 //!
 //! From Android 12 the system shows a "<app> pasted from your clipboard"
 //! toast when [`read_text`] reads a clip another app copied. [`has_text`]
 //! reads only the clip's description, which shows no toast, so call
 //! [`read_text`] only when the user asked to paste.
 
-pub use crate::clipboard::ClipboardError;
+pub use crate::clipboard::{ClipboardError, Copied};
 
 use super::jni_util::{opt_string, with_app_class};
-use crate::clipboard::non_empty;
+use crate::clipboard::{copied_from_kind, non_empty};
 use android_activity::AndroidApp;
 use jni::objects::{JObjectArray, JString};
 use jni::{jni_sig, jni_str};
@@ -89,6 +91,40 @@ pub fn has_text(app: &AndroidApp) -> Result<bool, ClipboardError> {
         Some(error) => Err(error),
         None => Ok(kind == "yes"),
     }
+}
+
+/// Put `text` on the clipboard as plain text (`ClipData.newPlainText`),
+/// replacing what was there. Any thread, as [`read_text`]; no permission,
+/// and the app's window need not have focus.
+///
+/// `Ok(Copied { system_notice: true })` on Android 13 and later, where the
+/// system shows its own confirmation: the app shows none. On older
+/// versions `system_notice` is `false` and the app may show its own.
+/// An empty `text` is written as given (it clears the clipboard's text).
+/// The clip is labelled with the app's name.
+///
+/// libmobile never logs the text or its length.
+pub fn write_text(app: &AndroidApp, text: &str) -> Result<Copied, ClipboardError> {
+    let answer = with_app_class(app, PLUGIN_CLASS, |env, activity, class| {
+        let text = JString::from_str(env, text)?;
+        let called = env.call_static_method(
+            class,
+            jni_str!("writeText"),
+            jni_sig!("(Landroid/app/Activity;Ljava/lang/String;)Ljava/lang/String;"),
+            &[activity.into(), (&text).into()],
+        );
+        let kind = match called {
+            Err(jni::errors::Error::JavaException) => {
+                env.exception_catch()?;
+                return Err(jni::errors::Error::JavaException);
+            }
+            other => other?.l()?,
+        };
+        let kind = env.cast_local::<JString>(kind)?;
+        Ok(opt_string(&kind).unwrap_or_default())
+    });
+    let kind = answer.map_err(platform)?;
+    copied_from_kind(&kind)
 }
 
 fn platform(err: jni::errors::Error) -> ClipboardError {

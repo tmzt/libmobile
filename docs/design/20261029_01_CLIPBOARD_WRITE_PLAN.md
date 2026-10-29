@@ -1,7 +1,7 @@
 ---
 title: Writing text to the clipboard
 date: 2026-10-29
-status: Draft
+status: In implementation
 covers:
   - "Feature `clipboard` gains the write: `android::clipboard::write_text(app:
     &AndroidApp, text: &str) -> Result<Copied, ClipboardError>`, through
@@ -311,3 +311,16 @@ it. libmorph and libmorph-build take it without a minor bump.
   `NoSuchMethodError` (reported as `Platform`). libmorph republishes the
   Gradle sources of its own libmobile dependency, so this holds only while
   an app's `Cargo.lock` resolves libmobile to 0.3.5 or later.
+
+## Amendment — 2026-10-29 17:35 EDT: approved; implementation started
+
+The owner approved the plan on 2026-10-29: "approve all four plans and
+build them", and "push them when built". It is approved as written, and
+its open questions take the body's defaults: (1) the write runs on the
+calling thread, as the read does; (2) marking the text sensitive
+(`EXTRA_IS_SENSITIVE`) is deferred to a later, additive
+`write_text_with`; (3) below Android 13 the `system_notice` flag is
+enough, and libmobile shows no toast of its own; (4) no size cap.
+
+Step 1 is this commit, the first implementing one. Implementation has
+started and the document is now immutable (Rule 1.5).

@@ -281,7 +281,7 @@ pub const PLUGINS: &[Plugin] = &[
             ..Contributes::NOTHING
         },
     },
-    // The clipboard's text, read only (`clipboard/`,
+    // The clipboard's text, read and written (`clipboard/`,
     // `src/android/clipboard.rs`). No permission or manifest entry.
     Plugin {
         feature: Some("clipboard"),

@@ -62,8 +62,8 @@ system-events = []
 # app (android/java/dev/highbay/libmobile/notify, src/android/notify.rs).
 # Adds POST_NOTIFICATIONS. With `system-events`, `SystemEvent::Notify`.
 notifications = []
-# The clipboard's text, read only (android/java/dev/highbay/libmobile/clipboard,
-# src/android/clipboard.rs): `read_text` and `has_text`. No permission.
+# The clipboard's text, read and written (android/java/dev/highbay/libmobile/clipboard,
+# src/android/clipboard.rs): `read_text`, `has_text` and `write_text`. No permission.
 clipboard = []
 # Image decoding and encoding through Android's own codecs
 # (android/java/dev/highbay/libmobile/image, src/android/image_codec.rs):
