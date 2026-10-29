@@ -289,3 +289,17 @@ chooser (`docs/design/20261028_02_MEDIA_REQUEST_PLAN.md`). Additive.
 - The generated `libmobile.gradle` manifest task replaces
   `${applicationId}` in `<application>` contributions. The manifest of an
   app without `media-request` is unchanged.
+
+## 0.3.5 — 2026-10-29 (tag `v0.3.5`)
+
+Writing text to the clipboard
+(`docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md`). Additive.
+
+- **Feature `clipboard`** gains the write (no new feature, permission or
+  manifest entry): `android::clipboard::write_text(&AndroidApp, &str) ->
+  Result<Copied, ClipboardError>`, through `ClipboardManager.setPrimaryClip`
+  of a plain-text clip labelled with the app's name; any thread, no focus
+  rule. `libmobile::clipboard::Copied` (`#[non_exhaustive]`: `system_notice:
+  bool`, `true` from Android 13, where the system confirms the copy
+  itself), also in `android::clipboard`. `ClipboardError` is unchanged.
+
