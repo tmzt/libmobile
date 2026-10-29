@@ -1110,3 +1110,69 @@ started.
 5. `examples/build.sh wgpu` builds; `dexdump` shows `image/ImageCodecPlugin`
    with `decode`, `copyOut`, `probe` and `encode` as public static methods
    of the signatures the Rust side calls.
+
+## 2026-10-29 02:11 EDT — media request plan, steps 1-5 and 7 and its release: departures
+
+Plan: docs/design/20261028_02_MEDIA_REQUEST_PLAN.md (approved 2026-10-29
+01:53 EDT). Built as 0.3.4 (tag `v0.3.4`) on the branch `wt-next`. Not
+yet run on a phone; every S23 check is open.
+
+1. Steps 1 to 5 and step 7 (README) are built together with the release,
+   in one commit. Step 6's own example (`examples/mediarequest`) is not
+   built: `examples/wgpu` gains `--es cmd media-pick`, `media-multi`,
+   `media-camera`, `media-video`, `media-photo-picker` and `media-small`
+   instead, in the example's own commit, as for `clipboard` and
+   `image-codec`. Step 1's Gradle check holds on that APK: its manifest has
+   the provider with the authority
+   `dev.highbay.libmobile.example.wgpu.libmobile.media` and both
+   `<queries>`.
+2. The core gate (4.3) is in two parts: the platform-free table in
+   `src/permission_gate.rs` (host-tested) and the Android side in
+   `src/android/permission_gate.rs` (boxed waiters, run on the main loop
+   after the table's lock is released). The camera keeps its own queue of
+   waiting calls (`src/camera/gate.rs`); only the routing of its request
+   (the `GATE_REQUEST` slot and `camera::offer_permission`) moved to the
+   core gate. `Gate::in_flight` is no longer test-only. The table is
+   cleared at the end of each run.
+   For the camera plan (docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md,
+   3.2, frozen) this is a departure: the CAMERA answer is routed by the core
+   gate, not by the camera's own `offer_permission`; behaviour is
+   unchanged. That plan's amendment recording it waits for the owner.
+3. Rust makes every decision of 2 and 4.2 (`media::spec`: the screen, the
+   types, the limits, the camera bits); the plugin only applies them. Its
+   `request` takes `(Activity, id, int[] {photoPicker, maxItems, delivery,
+   camera bits, cameraLeftOut}, maxBytes, type, mimes, title)`.
+4. `nativeMediaResult` also carries `picker` and `delivery` (Rust has no
+   request after a process restart): `(id, restored, error, picker,
+   delivery, cameraLeftOut, truncated, sources[], uris[], mimes[],
+   names[], sizes[], paths[], itemErrors[], exif[])`.
+5. The pending record also holds `picker` and `camera_left_out`. It is
+   read and deleted on the UI thread in `onActivityResult`, so a request
+   made before the copy ends keeps its own. The Kotlin parser's rules are
+   mirrored in Rust (`media::parse_pending`) for step 5's host test, as
+   `file_name_ok` mirrors the provider's check; on the phone only Kotlin
+   reads it.
+6. 4.4 step 3 is narrowed: a returned URI is `MediaSource::Camera` only
+   when it is the only one, no camera file was written, a video entry was
+   offered and its MIME type is `video/*`. As written, any gallery pick
+   would be `Camera` whenever a video entry was offered.
+7. A camera item over `max_bytes` is `TooLarge` (its file deleted), and
+   camera items count toward `max_items`.
+8. "Busy" is held in Rust from `request_media` to its answer, across runs,
+   and in Kotlin while the chooser is up; Kotlin's `busy` maps to `Busy`.
+   At the end of a run, a request still waiting at the CAMERA gate is
+   dropped with no answer (`PermissionPlugin` drops its queue with the
+   activity).
+9. Additions beyond 5: `MediaRequestId::id()` (as `PermissionRequest::id`),
+   the constants are public (`MEDIA_CACHE_MAX_AGE` as a `Duration`, and
+   `MEDIA_DIR`), `MediaError` has `Display` and `Error`;
+   `MediaKind::Mime(vec![])` is `Any` and a `max_bytes` of 0 is taken as 1.
+   `MediaRequest` is `#[non_exhaustive]`, so other crates set its fields on
+   `MediaRequest::default()`.
+10. `getPickImagesMaxLimit` is called in a `try`; if it is missing the limit
+    is `max_items`.
+11. `examples/build.sh wgpu` builds; `dexdump` shows
+    `media/MediaRequestPlugin` with `request`, `declares` and
+    `photoPickerAvailable` as public static methods and the native
+    `nativeMediaResult` of the signatures the Rust side uses, and
+    `media/MediaFileProvider`.
