@@ -1059,3 +1059,18 @@ read only, with Android 10's focus rule and Android 12's toast documented.
 Approved by the owner ("plan those in appropriate repos with subagent,
 then impl"); libmorph's plan of the same name wraps it. For libmobile
 0.3.2.
+
+## 2026-10-28 23:52 EDT — clipboard plan, steps 1 and 2: departures
+
+Plan: docs/design/20261028_03_CLIPBOARD_PLAN.md. Built on the branch
+`wt-clipboard`. Not yet run on a phone.
+
+1. Steps 1 and 2 are built together (0.3.2, the README section and the
+   `VERSIONS.md` entry), on the owner's approval to plan and implement;
+   step 1's S23 check is still open.
+2. The Kotlin doc comments do not spell the MIME pattern as `text/*`: in
+   Kotlin `/*` opens a nested comment inside a KDoc, and the file would
+   not compile.
+3. `examples/build.sh wgpu` builds; `dexdump` shows
+   `clipboard/ClipboardPlugin` with `readText` and `hasText` as public
+   static methods of the signatures the Rust side calls.
