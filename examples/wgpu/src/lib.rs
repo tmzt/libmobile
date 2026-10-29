@@ -23,6 +23,10 @@
 //! `adb shell cmd uimode night yes`). `--es cmd bar-icons-dark` and
 //! `bar-icons-light` set the system bars' icons
 //! (`android::set_system_bar_icons`) from another thread.
+//!
+//! `--es cmd clipboard` logs `android::clipboard::has_text`, then
+//! `read_text` as the text's length in bytes (never the text). Copy a line
+//! in another app first; Android 12 and later show their "pasted" toast.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -38,6 +42,7 @@ mod app {
     use crate::uniforms::Uniforms;
     use libmobile::MobileEvent;
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
+    use libmobile::android::clipboard;
     use libmobile::android::dirs;
     use libmobile::android::link::open_link;
     use libmobile::android::{
@@ -48,6 +53,21 @@ mod app {
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
     const TAP_TIME: Duration = Duration::from_millis(300);
     const TAP_SLOP: f32 = 24.0;
+
+    /// Log the clipboard's state and its text's length, never the text.
+    fn log_clipboard(app: &AndroidApp) {
+        log::info!(
+            "wgpu example: clipboard has_text {:?}",
+            clipboard::has_text(app)
+        );
+        match clipboard::read_text(app) {
+            Ok(Some(text)) => log::info!(
+                "wgpu example: clipboard read_text Ok(Some({} bytes))",
+                text.len()
+            ),
+            other => log::info!("wgpu example: clipboard read_text {other:?}"),
+        }
+    }
 
     /// Log `android::dirs` against `internal_data_path`, here and from
     /// another thread.
@@ -132,6 +152,7 @@ mod app {
                                 log::info!("wgpu example: set_system_bar_icons({dark}, {dark})");
                             });
                         }
+                        Some("clipboard") => log_clipboard(app),
                         Some(other) => log::warn!("wgpu example: unknown cmd {other:?}"),
                         None => {}
                     }
