@@ -1176,3 +1176,19 @@ yet run on a phone; every S23 check is open.
     `photoPickerAvailable` as public static methods and the native
     `nativeMediaResult` of the signatures the Rust side uses, and
     `media/MediaFileProvider`.
+
+## 2026-10-29 17:31 EDT — Writing text to the clipboard (proposed)
+
+Plan: `docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md` (Draft). Requested
+through the RoundTwo session for Copy buttons on its mock interview
+results; the owner chose to "Plan it in the libraries: write a plan in
+libmobile for writing the clipboard (Android's ClipboardManager) [...]
+each under its own rules and version". The existing `clipboard` feature
+gains `android::clipboard::write_text(&AndroidApp, &str) -> Result<Copied,
+ClipboardError>` through `setPrimaryClip(ClipData.newPlainText(...))`;
+`Copied::system_notice` is true from Android 13, where the system confirms
+the copy itself. The read plan (`20261028_03`) is frozen and not edited.
+libmorph's plan of the same name wraps it. For libmobile 0.3.5, or the
+next free patch.
+
+Proposed only; nothing is implemented until the owner approves.
