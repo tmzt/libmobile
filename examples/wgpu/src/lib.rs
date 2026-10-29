@@ -27,6 +27,9 @@
 //! `--es cmd clipboard` logs `android::clipboard::has_text`, then
 //! `read_text` as the text's length in bytes (never the text). Copy a line
 //! in another app first; Android 12 and later show their "pasted" toast.
+//! `--es cmd clipboard-write` writes the fixed text `CLIPBOARD_CHECK`
+//! (`android::clipboard::write_text`) and logs only the `Result`; a
+//! `clipboard` after it reads the example's own clip, with no toast.
 //!
 //! `--es cmd image-codec`, on a thread of its own, probes and decodes every
 //! file in `cache_dir()/codec-test/` (`android::image_codec`), logs each
@@ -76,6 +79,10 @@ mod app {
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
     const TAP_TIME: Duration = Duration::from_millis(300);
     const TAP_SLOP: f32 = 24.0;
+
+    /// The fixed text `--es cmd clipboard-write` copies (29 bytes). It is
+    /// never logged, so a check can look for it in the whole log.
+    const CLIPBOARD_CHECK: &str = "libmobile-clipboard-check-29Q";
 
     /// Log the clipboard's state and its text's length, never the text.
     fn log_clipboard(app: &AndroidApp) {
@@ -363,6 +370,10 @@ mod app {
                             });
                         }
                         Some("clipboard") => log_clipboard(app),
+                        Some("clipboard-write") => log::info!(
+                            "wgpu example: clipboard write_text {:?}",
+                            clipboard::write_text(app, CLIPBOARD_CHECK)
+                        ),
                         Some("image-codec") => {
                             std::thread::spawn(codec_test);
                         }
