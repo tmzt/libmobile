@@ -1085,3 +1085,28 @@ share-and-view plan", the dependency named in flankr's binary files plan
 wraps them. For the next libmobile patch after 0.3.2.
 
 Proposed only; nothing is implemented until the owner approves.
+
+## 2026-10-29 00:23 EDT — share and view plan, step 1 (image-codec) and its release: departures
+
+Plan: docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md (its approval
+amendment: image-codec only). Built as 0.3.3 (tag `v0.3.3`). Not yet run on
+a phone; step 1's S23 checks are open. share-out and share-target are not
+started.
+
+1. Step 1 and the part of step 5 that covers image-codec (README, VERSIONS,
+   0.3.3) are built together; the rest of step 5 waits with steps 2-4. The
+   README's `--es cmd image-codec` line is in the release commit, its code in
+   the example's commit after it.
+2. An unknown format reaches Kotlin as `DecodeException.SOURCE_MALFORMED_DATA`
+   with Skia's "unimplemented" message (there is no code of its own); the
+   plugin maps that message to `unsupported`, other malformed data to
+   `malformed`. To be confirmed on the S23 with a text file.
+3. Padded bitmap rows are packed in place in the output `Vec` (Rust copies
+   `rowBytes * height` and truncates), not through a separate scratch buffer.
+4. `probe` answers `[IntArray(width, height, orientation), mime]` or
+   `[null, error]`; `encode`'s format is 0 (JPEG) or 1 (PNG).
+   `IMAGE_MAX_PIXELS` is public; `ImageError::from_message` is crate-private,
+   as in the other modules.
+5. `examples/build.sh wgpu` builds; `dexdump` shows `image/ImageCodecPlugin`
+   with `decode`, `copyOut`, `probe` and `encode` as public static methods
+   of the signatures the Rust side calls.
