@@ -10,8 +10,9 @@ name = "libmobile_example_wgpu"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]
-# `clipboard`: `--es cmd clipboard`; `image-codec`: `--es cmd image-codec`.
-libmobile = { path = "../..", features = ["clipboard", "image-codec"] }
+# `clipboard`: `--es cmd clipboard`; `image-codec`: `--es cmd image-codec`;
+# `media-request`: `--es cmd media-pick` and the other `media-*` commands.
+libmobile = { path = "../..", features = ["clipboard", "image-codec", "media-request"] }
 log = "0.4"
 
 # The host copy, for `libmobile::gradle` in build.rs; `icons` makes the

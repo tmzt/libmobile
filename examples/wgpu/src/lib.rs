@@ -36,6 +36,16 @@
 //! same pixels. Put files there with `adb push <file> /data/local/tmp/` and
 //! `adb shell run-as dev.highbay.libmobile.example.wgpu sh -c
 //! 'mkdir -p cache/codec-test && cp /data/local/tmp/<file> cache/codec-test/'`.
+//!
+//! The `media-*` commands ask for media (`android::media::request_media`)
+//! and log each `MobileEvent::Media` (counts, MIME types, sizes, the EXIF
+//! orientation, never a URI or name), probing the first image's bytes with
+//! `image_codec`: `media-pick` (one image, as bytes), `media-multi` (up to
+//! five images and videos, as files), `media-camera` (the chooser with a
+//! photo camera entry), `media-video` (with a video camera entry),
+//! `media-photo-picker` (the Photo Picker, up to three images) and
+//! `media-small` (one image under a 1 MiB cap). This example has no CAMERA
+//! in its manifest, so the camera entry asks for no permission.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -55,6 +65,9 @@ mod app {
     use libmobile::android::dirs;
     use libmobile::android::image_codec::{self, Encoding};
     use libmobile::android::link::open_link;
+    use libmobile::android::media::{
+        self, CameraEntry, Delivery, MediaData, MediaKind, MediaRequest, MediaResponse, Picker,
+    };
     use libmobile::android::{
         AndroidApp, InputStatus, MobileApp, build_info, night_mode, run, set_system_bar_icons,
     };
@@ -188,6 +201,83 @@ mod app {
         )
     }
 
+    /// `--es cmd media-*`: the request each command makes.
+    fn media_request(cmd: &str) -> Option<MediaRequest> {
+        let mut request = MediaRequest::default();
+        match cmd {
+            "media-pick" => {}
+            "media-multi" => {
+                request.kind = MediaKind::ImagesAndVideos;
+                request.max_items = 5;
+                request.delivery = Delivery::File;
+            }
+            "media-camera" => request.camera = CameraEntry::Photo,
+            "media-video" => {
+                request.kind = MediaKind::Videos;
+                request.camera = CameraEntry::Video;
+                request.delivery = Delivery::File;
+            }
+            "media-photo-picker" => {
+                request.picker = Picker::PhotoPicker;
+                request.max_items = 3;
+            }
+            "media-small" => request.max_bytes = 1024 * 1024,
+            _ => return None,
+        }
+        Some(request)
+    }
+
+    /// Log a media answer without its URIs or names; probe the first image.
+    fn log_media(response: MediaResponse) {
+        let reply = match response.result {
+            Ok(reply) => reply,
+            Err(err) => {
+                log::info!(
+                    "wgpu example: media {:?}: {err:?}",
+                    response.request.map(|r| r.id())
+                );
+                return;
+            }
+        };
+        log::info!(
+            "wgpu example: media {:?}: {} item(s), picker {:?}, camera_left_out {}, truncated {}",
+            response.request.map(|r| r.id()),
+            reply.items.len(),
+            reply.picker,
+            reply.camera_left_out,
+            reply.truncated
+        );
+        for item in &reply.items {
+            let data = match &item.data {
+                MediaData::Bytes(bytes) => format!("{} bytes in memory", bytes.len()),
+                MediaData::File(path) => format!(
+                    "file of {:?} bytes",
+                    std::fs::metadata(path).map(|m| m.len()).ok()
+                ),
+                other => format!("{other:?}"),
+            };
+            log::info!(
+                "wgpu example: media item {:?} {:?} size {:?} exif {}: {data}",
+                item.source,
+                item.mime,
+                item.size,
+                item.exif_orientation
+            );
+        }
+        let first = reply.items.into_iter().find_map(|item| match item.data {
+            MediaData::Bytes(bytes) => Some(bytes),
+            _ => None,
+        });
+        if let Some(bytes) = first {
+            std::thread::spawn(move || {
+                log::info!(
+                    "wgpu example: media first item probe {:?}",
+                    image_codec::probe_image(&bytes)
+                );
+            });
+        }
+    }
+
     /// Log `android::dirs` against `internal_data_path`, here and from
     /// another thread.
     fn log_dirs(app: &AndroidApp) {
@@ -240,6 +330,7 @@ mod app {
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
+                MobileEvent::Media(response) => log_media(response),
                 MobileEvent::ConfigChanged => {
                     log::info!(
                         "wgpu example: ConfigChanged: night_mode {:?}",
@@ -274,6 +365,11 @@ mod app {
                         Some("clipboard") => log_clipboard(app),
                         Some("image-codec") => {
                             std::thread::spawn(codec_test);
+                        }
+                        Some(cmd) if media_request(cmd).is_some() => {
+                            let request = media_request(cmd).unwrap_or_default();
+                            let id = media::request_media(app, &request);
+                            log::info!("wgpu example: {cmd}: request {}", id.id());
                         }
                         Some(other) => log::warn!("wgpu example: unknown cmd {other:?}"),
                         None => {}
