@@ -778,3 +778,17 @@ no features, `--features media-request` and `--all-features`, and
 7. **URI only.** A `Delivery::Uri` that copies nothing, for apps that
    pass the URI straight to another intent (share, crop)? The read grant
    ends with the activity, so it is of limited use.
+
+## Amendment — 2026-10-29 01:53 EDT: approved
+
+The owner approved the plan on 2026-10-29 ("approve media requests"). It
+is approved as written; its open questions keep the body's choices as the
+smallest ones, each changeable by a later amendment: (1) a refused CAMERA
+fails the whole request; (2) the chooser with its camera entry by
+default, the Photo Picker on request; (3) no full-size `camera-intent`
+here; (4) the camera plan's gate moves to the core
+`src/android/permission_gate.rs` as 4.3 says, recorded in the camera plan
+by an amendment when built; (5) no video options yet; (6) no
+`cancel_media`; (7) no `Delivery::Uri`. Its version is the next free
+patch at its commit (0.3.4 as of now). The status stays `Draft` until the
+first implementing commit (Rule 1.5).
