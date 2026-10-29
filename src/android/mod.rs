@@ -34,6 +34,8 @@ pub mod camera_intent;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 pub mod dirs;
+#[cfg(feature = "image-codec")]
+pub mod image_codec;
 mod insets;
 mod intent;
 mod jni_util;

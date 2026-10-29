@@ -39,6 +39,7 @@ android/java/dev/highbay/libmobile/
   service/                  feature "foreground-service": the foreground service and its notification
   battery/                  feature "battery": battery optimization and the battery settings pages
   events/                   feature "system-events": visibility, network and Doze callbacks
+  image/                    feature "image-codec": ImageDecoder and Bitmap.compress
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
   gradle.rs                 generates the Gradle project from the app's build.rs
@@ -62,6 +63,7 @@ examples/
 | `system-events` | `events/SystemEventsPlugin` | `system_events::subscribe` and `current`; `ACCESS_NETWORK_STATE` |
 | `notifications` | `notify/NotifyPlugin`    | `android::notify` (alerts on the app's own channels); `MobileEvent::Notify`; `POST_NOTIFICATIONS`; with `system-events`, `SystemEvent::Notify` |
 | `clipboard`   | `clipboard/ClipboardPlugin` | `android::clipboard::read_text` and `has_text`, read only; no permission |
+| `image-codec` | `image/ImageCodecPlugin`   | `android::image_codec::probe_image`, `decode_image` and `encode_image` through Android's own codecs; no permission or manifest entry |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 | `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
@@ -408,6 +410,35 @@ if clipboard::has_text(&app).unwrap_or(false) {
 }
 ```
 
+### Images
+
+Feature `image-codec`: decoding and encoding through Android's own codecs,
+with no image crate in the app. `android::image_codec::decode_image(&bytes,
+max_side)` goes through `ImageDecoder`: it applies the EXIF orientation of
+a JPEG or HEIF, reads HEIC/HEIF, PNG, JPEG, WebP, GIF, BMP and DNG (the
+first frame of an animation), and gives `Rgba`: sRGB, straight alpha, rows
+packed, the long side at most `max_side` (0 keeps the full size; never
+enlarged; `fit_within` gives the size). `encode_image(&rgba, Encoding::Jpeg
+{ quality } | Encoding::Png)` goes through `Bitmap.compress`; JPEG has no
+alpha, so encode an image that is not `is_opaque()` as PNG. `probe_image`
+reads the MIME type, the stored size and the EXIF orientation from the
+headers only. Errors say why (`Unsupported`, `Malformed`, `Incomplete`,
+`TooLarge` over 64 Mi pixels, `BadInput`, `OutOfMemory`).
+
+All three block (a 12 MP HEIC takes some hundreds of milliseconds) and may
+run on any thread **except** the main loop's; they need no `AndroidApp`.
+
+```rust
+use libmobile::android::image_codec::{self, Encoding};
+
+// On a worker thread:
+let info = image_codec::probe_image(&bytes)?;
+let thumb = image_codec::decode_image(&bytes, 192)?;
+let image = image_codec::decode_image(&bytes, 2048)?;
+let encoding = if image.is_opaque() { Encoding::Jpeg { quality: 90 } } else { Encoding::Png };
+let upload = image_codec::encode_image(&image, encoding)?;
+```
+
 ### System events
 
 With the `system-events` feature, any thread can follow what happens to the
@@ -538,7 +569,10 @@ whether the files directory is `internal_data_path()`, and the build info
 (`android::build_info`). It logs each `MobileEvent::TrimMemory`
 (`adb shell am send-trim-memory dev.highbay.libmobile.example.wgpu UI_HIDDEN`).
 `--es cmd clipboard` logs `android::clipboard::has_text` and the length
-of `read_text`'s text, never the text.
+of `read_text`'s text, never the text. `--es cmd image-codec` probes,
+decodes (full size and at 2048, timed) and re-encodes as JPEG 90 and PNG
+every file in the app's `cache/codec-test/` (copied in with `adb push` and
+`run-as ... cp`), logging each result.
 
 ## Development
 
@@ -587,4 +621,4 @@ dual licensed as above, without any additional terms or conditions.
 | [Single-frame camera capture and QR scanning with auto zoom](docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md) | 2026-10-28 | In implementation | An in-process NDK camera that asks for CAMERA only on first use, one still frame (`camera-capture`), and QR scanning with rqrr, auto zoom around the app's pinch zoom, and exposure that steps down for screens (`camera-qr`); `camera` is the in-process base and the system camera app hand-off becomes `camera-intent` (0.3.0, breaking). Approved; in implementation. |
 | [Asking the user for a photo or video through Android's own chooser](docs/design/20261028_02_MEDIA_REQUEST_PLAN.md) | 2026-10-28 | Draft | A `media-request` feature: `ACTION_GET_CONTENT` in the system chooser with optional camera entries writing full size through libmobile's own content provider (no AndroidX), or the Photo Picker; the items' bytes or cache files in `MobileEvent::Media`; CAMERA asked for only when the manifest declares it and the camera entry is wanted. Proposed; awaiting the owner. |
 | [Reading the clipboard's text](docs/design/20261028_03_CLIPBOARD_PLAN.md) | 2026-10-28 | In implementation | A `clipboard` feature: `android::clipboard::read_text` (the first item's text, `NotFocused` when Android 10's focus rule would hide it) and `has_text` (no Android 12 toast), read only. Being built on the owner's approval. |
-| [Viewing and sharing the app's files, receiving shares, and decoding images through Android](docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md) | 2026-10-28 | Draft | Three features, no permissions and no Jetpack: `share-out` (a read-only provider of libmobile's own for `cache_dir()/libmobile-share/`, `view_file` and `share_file` in the system chooser, `prune`), `share-target` (the app as an `ACTION_SEND`/`SEND_MULTIPLE` target for `image/*` and `text/plain`, a translucent receiver copying the streams under a cap while it holds the grant, `MobileEvent::Shared`) and `image-codec` (`decode_image` through `ImageDecoder` with EXIF rotation and HEIC, `encode_image` through `Bitmap.compress`, `probe_image`). Proposed; awaiting the owner. |
+| [Viewing and sharing the app's files, receiving shares, and decoding images through Android](docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md) | 2026-10-28 | In implementation | Three features, no permissions and no Jetpack: `share-out` (a read-only provider of libmobile's own for `cache_dir()/libmobile-share/`, `view_file` and `share_file` in the system chooser, `prune`), `share-target` (the app as an `ACTION_SEND`/`SEND_MULTIPLE` target for `image/*` and `text/plain`, a translucent receiver copying the streams under a cap while it holds the grant, `MobileEvent::Shared`) and `image-codec` (`decode_image` through `ImageDecoder` with EXIF rotation and HEIC, `encode_image` through `Bitmap.compress`, `probe_image`). Approved; `image-codec` built on its own first (0.3.3), the two sharing features wait for the owner. |

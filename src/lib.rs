@@ -76,6 +76,8 @@ pub mod event;
 pub mod gradle;
 #[cfg(feature = "icons")]
 mod icon;
+#[cfg(feature = "image-codec")]
+pub mod image_codec;
 pub mod insets;
 pub mod intent;
 pub mod key_store;

@@ -261,6 +261,14 @@ pub const PLUGINS: &[Plugin] = &[
         class: "clipboard.ClipboardPlugin",
         contributes: Contributes::NOTHING,
     },
+    // Image decoding and encoding through ImageDecoder and Bitmap.compress
+    // (`image/`, `src/android/image_codec.rs`). Nothing in the manifest.
+    Plugin {
+        feature: Some("image-codec"),
+        dir: "image",
+        class: "image.ImageCodecPlugin",
+        contributes: Contributes::NOTHING,
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -1062,6 +1070,7 @@ mod tests {
                 "system-events",
                 "notifications",
                 "clipboard",
+                "image-codec",
                 "secure-store-no-strongbox"
             ]
         );
@@ -1203,6 +1212,19 @@ mod tests {
         assert_eq!(plugin.class, "clipboard.ClipboardPlugin");
         assert_eq!(merge(&[*plugin]), Merged::default());
         assert!(source_dirs(&active).contains(&"clipboard"));
+    }
+
+    #[test]
+    fn image_codec_plugin_is_feature_gated_and_contributes_nothing() {
+        assert!(!active_plugins(&[]).iter().any(|p| p.dir == "image"));
+        let active = active_plugins(&["image-codec"]);
+        let plugin = active
+            .iter()
+            .find(|p| p.dir == "image")
+            .expect("the image codec plugin");
+        assert_eq!(plugin.class, "image.ImageCodecPlugin");
+        assert_eq!(merge(&[*plugin]), Merged::default());
+        assert!(source_dirs(&active).contains(&"image"));
     }
 
     #[test]

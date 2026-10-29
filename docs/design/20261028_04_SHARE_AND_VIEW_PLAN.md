@@ -1,7 +1,7 @@
 ---
 title: Viewing and sharing the app's files, receiving shares, and decoding images through Android
 date: 2026-10-28
-status: Draft
+status: In implementation
 covers:
   - "Feature `share-out`: a read-only content provider of libmobile's own
     (no AndroidX `FileProvider`), authority
@@ -912,3 +912,11 @@ open questions 1, 2, 3, 5 and 6 (all about sharing) stay open; question 4
 is answered: `image-codec` ships on its own first. Its version is the next
 free patch (0.3.3). The status stays `Draft` until the first implementing
 commit (Rule 1.5).
+
+## Amendment — 2026-10-29 00:20 EDT: implementation has started; the document is now immutable
+
+Step 1 (`image-codec`) is the first implementing commit, together with the
+part of step 5 (README and release) that covers it, as libmobile 0.3.3.
+Steps 2 to 4 (`share-out`, `share-target`) and the rest of step 5 are not
+started; they wait for the owner, per the amendment of 2026-10-29
+00:07 EDT.

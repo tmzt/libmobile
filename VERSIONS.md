@@ -232,3 +232,25 @@ Additive.
   `libmobile::clipboard::ClipboardError` (`#[non_exhaustive]`: `NotFocused`,
   `Platform(String)`), also in `android::clipboard`, with `Display` and
   `Error`. Read only.
+
+## 0.3.3 — 2026-10-29 (tag `v0.3.3`)
+
+Decoding and encoding images through Android's own codecs
+(`docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md` step 1, with its
+amendment of 2026-10-29 00:07 EDT: `image-codec` only; `share-out` and
+`share-target` are not in this release). Additive.
+
+- **Feature `image-codec`** (Kotlin `image.ImageCodecPlugin`; no
+  permission or manifest entry; framework `ImageDecoder`, API 28):
+  `android::image_codec::probe_image(&[u8]) -> Result<ImageInfo,
+  ImageError>`, `decode_image(&[u8], max_side: u32) -> Result<Rgba,
+  ImageError>` and `encode_image(&Rgba, Encoding) -> Result<Vec<u8>,
+  ImageError>`, any thread but the main loop's.
+  `libmobile::image_codec::{Rgba, ImageInfo, Encoding, ImageError,
+  fit_within, IMAGE_MAX_PIXELS}`, also in `android::image_codec`: `Rgba`
+  (`new`, `is_opaque`); `ImageInfo` (`#[non_exhaustive]`: `mime`, `width`,
+  `height`, `exif_orientation`); `Encoding` (`#[non_exhaustive]`:
+  `Jpeg { quality }`, `Png`); `ImageError` (`#[non_exhaustive]`:
+  `Unsupported`, `Malformed`, `Incomplete`, `TooLarge { width, height }`,
+  `BadInput(&'static str)`, `OutOfMemory`, `Platform(String)`), with
+  `Display` and `Error`.

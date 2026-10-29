@@ -1,6 +1,6 @@
 [package]
 name = "libmobile"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 description = "Extended NativeActivity framework for Rust on Android: Kotlin plugin bridges, compile-time plugin registry, non-blocking worker channels"
 license = "MIT OR Apache-2.0"
@@ -65,6 +65,11 @@ notifications = []
 # The clipboard's text, read only (android/java/dev/highbay/libmobile/clipboard,
 # src/android/clipboard.rs): `read_text` and `has_text`. No permission.
 clipboard = []
+# Image decoding and encoding through Android's own codecs
+# (android/java/dev/highbay/libmobile/image, src/android/image_codec.rs):
+# `probe_image`, `decode_image` (ImageDecoder: EXIF orientation, HEIC/HEIF)
+# and `encode_image` (Bitmap.compress, JPEG or PNG). No permission.
+image-codec = []
 # `system_events::subscribe_tokio`, a tokio receiver for system events.
 tokio = ["system-events", "dep:tokio"]
 # cpal, re-exported as `libmobile::android::cpal` (AAudio output and
