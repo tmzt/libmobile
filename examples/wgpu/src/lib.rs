@@ -27,6 +27,15 @@
 //! `--es cmd clipboard` logs `android::clipboard::has_text`, then
 //! `read_text` as the text's length in bytes (never the text). Copy a line
 //! in another app first; Android 12 and later show their "pasted" toast.
+//!
+//! `--es cmd image-codec`, on a thread of its own, probes and decodes every
+//! file in `cache_dir()/codec-test/` (`android::image_codec`), logs each
+//! `ImageInfo`, the decoded sizes and times (full size and `max_side` 2048)
+//! and `is_opaque`, and writes each back beside it as `<name>.out.jpg` (JPEG
+//! 90) and `<name>.out.png`, logging whether the PNG decodes back to the
+//! same pixels. Put files there with `adb push <file> /data/local/tmp/` and
+//! `adb shell run-as dev.highbay.libmobile.example.wgpu sh -c
+//! 'mkdir -p cache/codec-test && cp /data/local/tmp/<file> cache/codec-test/'`.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -44,6 +53,7 @@ mod app {
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::clipboard;
     use libmobile::android::dirs;
+    use libmobile::android::image_codec::{self, Encoding};
     use libmobile::android::link::open_link;
     use libmobile::android::{
         AndroidApp, InputStatus, MobileApp, build_info, night_mode, run, set_system_bar_icons,
@@ -67,6 +77,115 @@ mod app {
             ),
             other => log::info!("wgpu example: clipboard read_text {other:?}"),
         }
+    }
+
+    /// `--es cmd image-codec`: every file in `cache_dir()/codec-test/`
+    /// through `probe_image`, `decode_image` and `encode_image`. Not on the
+    /// main loop's thread: the calls block.
+    fn codec_test() {
+        let Some(dir) = dirs::cache_dir().map(|dir| dir.join("codec-test")) else {
+            log::warn!("wgpu example: image-codec: no cache directory");
+            return;
+        };
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(err) => {
+                log::warn!("wgpu example: image-codec: {}: {err}", dir.display());
+                return;
+            }
+        };
+        let mut paths: Vec<_> = entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .filter(|path| {
+                path.is_file()
+                    && !path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.contains(".out."))
+            })
+            .collect();
+        paths.sort();
+        log::info!("wgpu example: image-codec: {} files", paths.len());
+        for path in paths {
+            codec_test_file(&path);
+        }
+    }
+
+    fn codec_test_file(path: &std::path::Path) {
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                log::warn!("wgpu example: image-codec {name}: read: {err}");
+                return;
+            }
+        };
+        log::info!(
+            "wgpu example: image-codec {name}: {} bytes, probe {:?}",
+            bytes.len(),
+            image_codec::probe_image(&bytes)
+        );
+        let started = Instant::now();
+        let scaled = image_codec::decode_image(&bytes, 2048);
+        log::info!(
+            "wgpu example: image-codec {name}: decode max_side 2048 in {} ms: {}",
+            started.elapsed().as_millis(),
+            scaled
+                .as_ref()
+                .map_or_else(|err| format!("{err:?}"), describe_image)
+        );
+        let started = Instant::now();
+        let full = match image_codec::decode_image(&bytes, 0) {
+            Ok(full) => full,
+            Err(err) => {
+                log::info!(
+                    "wgpu example: image-codec {name}: decode full size in {} ms: {err:?}",
+                    started.elapsed().as_millis()
+                );
+                return;
+            }
+        };
+        log::info!(
+            "wgpu example: image-codec {name}: decode full size in {} ms: {}",
+            started.elapsed().as_millis(),
+            describe_image(&full)
+        );
+        for (encoding, ext) in [
+            (Encoding::Jpeg { quality: 90 }, "jpg"),
+            (Encoding::Png, "png"),
+        ] {
+            let started = Instant::now();
+            let out = path.with_file_name(format!("{name}.out.{ext}"));
+            match image_codec::encode_image(&full, encoding) {
+                Ok(encoded) => {
+                    let written = std::fs::write(&out, &encoded);
+                    log::info!(
+                        "wgpu example: image-codec {name}: {encoding:?} in {} ms: {} bytes, write {written:?}",
+                        started.elapsed().as_millis(),
+                        encoded.len()
+                    );
+                    if encoding == Encoding::Png {
+                        let back = image_codec::decode_image(&encoded, 0);
+                        log::info!(
+                            "wgpu example: image-codec {name}: PNG decodes back to the same pixels: {}",
+                            back.as_ref().is_ok_and(|back| *back == full)
+                        );
+                    }
+                }
+                Err(err) => {
+                    log::info!("wgpu example: image-codec {name}: {encoding:?}: {err:?}")
+                }
+            }
+        }
+    }
+
+    fn describe_image(image: &image_codec::Rgba) -> String {
+        format!(
+            "{}x{}, is_opaque {}",
+            image.width,
+            image.height,
+            image.is_opaque()
+        )
     }
 
     /// Log `android::dirs` against `internal_data_path`, here and from
@@ -153,6 +272,9 @@ mod app {
                             });
                         }
                         Some("clipboard") => log_clipboard(app),
+                        Some("image-codec") => {
+                            std::thread::spawn(codec_test);
+                        }
                         Some(other) => log::warn!("wgpu example: unknown cmd {other:?}"),
                         None => {}
                     }
