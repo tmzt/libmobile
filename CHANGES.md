@@ -1074,3 +1074,14 @@ Plan: docs/design/20261028_03_CLIPBOARD_PLAN.md. Built on the branch
 3. `examples/build.sh wgpu` builds; `dexdump` shows
    `clipboard/ClipboardPlugin` with `readText` and `hasText` as public
    static methods of the signatures the Rust side calls.
+
+## 2026-10-28 23:59 EDT — Share and view: Open in…, Share, Share → the app, and image decoding (proposed)
+
+Plan: `docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md` (Draft). Requested
+by the owner through the flankr session: "plan the libmobile
+share-and-view plan", the dependency named in flankr's binary files plan
+(10.6, and its 21:29 EDT amendment, item 6). Three features: `share-out`,
+`share-target` and `image-codec`; libmorph's later plan of the same name
+wraps them. For the next libmobile patch after 0.3.2.
+
+Proposed only; nothing is implemented until the owner approves.
