@@ -1222,3 +1222,55 @@ toast's wording on screen, and pasting in another app to see
 No departures from the plan in steps 1 and 2; its open questions took
 the body's defaults on the owner's approval (the plan's amendment).
 
+
+## 2026-11-03 17:42 EST — text input options plan, step 1 and its release: departures
+
+Plan `docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md`, started on the
+owner's word of 2026-11-03 for flankr's terminal view, where the
+keyboard's check key only hid the keyboard and nothing reached the app.
+Built in `8854118` (the crate) and `1f774da` (the `wgpu` example),
+released as 0.4.0 in `9d22b31`.
+
+Departures from the plan, small ones needed to make it work:
+- **Step 1, the action key keeps the keyboard up.** The listener handles
+  every action it reports (returns `true`), so Done no longer closes the
+  keyboard as Android's default does; the app hides it if it wants to.
+  Otherwise a Done would also look like a dismissal, and a terminal's
+  Enter would close the keyboard. The plan does not say either way.
+- **Step 1, never the full-screen editor.** Every option set adds
+  `IME_FLAG_NO_EXTRACT_UI`: the field is invisible, so a landscape
+  keyboard's extract editor would show an empty box over the app.
+- **Step 1, `TextAction::None` on one line** is `IME_ACTION_NONE` with
+  `IME_FLAG_NO_ENTER_ACTION`, so the key shows Enter (↵); Enter arrives
+  as a key event (`IME_NULL`, down and up) and is reported once, on the
+  down, as `TextAction(None)`, as the plan's "single-line fields always
+  report it" says. A hardware keyboard's Enter takes the same path.
+- **Step 1, the dismissal** is watched in Rust on the main loop, from the
+  inset reports libmobile already pumps (the newest per tick), and is
+  delivered right after the `Insets` event that shows it.
+- **Step 2, the version.** The plan said "Additive"; the release is 0.4.0
+  (Rule 4): `set_text_input` now uses the default options, so its Done
+  key keeps the keyboard up, the field asks for autocorrect, and the
+  full-screen editor is gone, which callers can observe. The types and
+  `MobileEvent`'s two variants are additive (`MobileEvent` is
+  `#[non_exhaustive]`). libmorph and libmorph-build take it as a minor
+  version under Rule 5.
+
+Not done: the visible-password input variation, which some keyboards
+(Samsung's among them) need before they stop suggesting words. It is not
+in the plan; if the S23 still suggests with `autocorrect: false`, it is a
+proposal for the owner (an option, not forced).
+
+Checks, passed: `cargo fmt --all -- --check`; `cargo clippy -p libmobile
+--all-targets` (host) and `cargo clippy --target aarch64-linux-android
+-p libmobile --all-targets` and `-p libmobile-example-wgpu`: no
+warnings; `cargo test -p libmobile`: 104 lib tests (9 new) and 8 more,
+all pass. The Kotlin compiles: `gradle compileDebugKotlin` in the
+example's generated project (debug, no APK), and `javap` shows
+`setActive(Landroid/app/Activity;ZLjava/lang/String;IIZI)V` and
+`nativeTextAction(I)V` as the Rust side calls and exports them.
+
+Open: step 1's **Done when** on the owner's S23 (each kind's keyboard,
+Done and Send logged, Back as `TextInputDismissed`, newlines on many
+lines, no suggestions without autocorrect). The plan stays
+`In implementation` until then.
