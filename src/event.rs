@@ -159,6 +159,16 @@ pub enum MobileEvent {
     Intent(IntentData),
     /// The hidden `InputConnection` field's full text after an IME edit.
     TextChanged(String),
+    /// The keyboard's action key (Done, Send, Go or Search), or Enter on a
+    /// single line, from a soft or hardware keyboard; the keyboard stays up.
+    /// On many lines with [`TextAction::None`](crate::text_input::TextAction::None),
+    /// Enter is a newline in `TextChanged` instead.
+    TextAction(crate::text_input::TextAction),
+    /// The keyboard closed while the field was active (Back, the keyboard's
+    /// hide key, or the system), once. The field stays focused:
+    /// `set_text_input_with(app, Some(..), ..)` shows it again. Hiding it
+    /// with `None` reports nothing.
+    TextInputDismissed,
     #[cfg(feature = "google-auth")]
     GoogleLogin(crate::auth::LoginOutcome),
     /// The system camera app's photo (`camera-intent`).

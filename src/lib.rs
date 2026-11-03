@@ -95,6 +95,10 @@ pub mod secure_store;
 pub mod service;
 #[cfg(any(feature = "foreground-service", feature = "system-events"))]
 pub mod system_events;
+// Its mapping and dismissal watch serve `android::text_input`; they build
+// and are tested on every host.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub mod text_input;
 pub mod worker;
 
 #[cfg(target_os = "android")]
@@ -106,3 +110,4 @@ pub use event::{MobileEvent, PermissionRequest, PermissionsOutcome, TrimLevel};
 pub use insets::{Insets, SafeArea};
 pub use intent::IntentData;
 pub use secure_store::{PutOptions, SecureStoreError, SecurityLevel};
+pub use text_input::{TextAction, TextInputOptions, TextKind};

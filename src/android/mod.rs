@@ -77,7 +77,7 @@ pub use link::open_app_settings;
 pub use ndk;
 pub use permission::{permission_granted, request_permissions, should_show_rationale};
 pub use surface::SurfaceTarget;
-pub use text_input::set_text_input;
+pub use text_input::{set_text_input, set_text_input_with};
 
 use crate::MobileEvent;
 use android_activity::{MainEvent, PollEvent};
@@ -189,13 +189,21 @@ fn map_main_event(event: &MainEvent<'_>) -> Option<MobileEvent> {
 
 fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     if let Some(insets) = insets::take_pending() {
+        let dismissed = text_input::ime_inset(insets.ime_bottom);
         handler.event(app, MobileEvent::Insets(insets));
+        if dismissed {
+            handler.event(app, MobileEvent::TextInputDismissed);
+        }
     }
     for intent in intent::take_pending() {
         handler.event(app, MobileEvent::Intent(intent));
     }
-    for text in text_input::take_pending() {
-        handler.event(app, MobileEvent::TextChanged(text));
+    for update in text_input::take_pending() {
+        let event = match update {
+            text_input::Update::Changed(text) => MobileEvent::TextChanged(text),
+            text_input::Update::Action(action) => MobileEvent::TextAction(action),
+        };
+        handler.event(app, event);
     }
     for level in trim_memory::take_pending() {
         handler.event(app, MobileEvent::TrimMemory(level));
@@ -254,6 +262,7 @@ fn pump_input<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
 fn discard_stale_commands() {
     let _ = intent::take_pending();
     let _ = text_input::take_pending();
+    text_input::reset();
     let _ = trim_memory::take_pending();
     #[cfg(feature = "google-auth")]
     let _ = auth::take_results();

@@ -1,7 +1,7 @@
 ---
 title: Soft keyboard options, the action key and dismissal
 date: 2026-10-24
-status: Draft
+status: In implementation
 covers:
   - "`TextInputOptions` for the hidden field: single or multiple lines,
     the keyboard type, the action key, autocorrect"
@@ -102,3 +102,9 @@ for Backspace. They are built after the notification and dark mode work
 and released after it (libmobile 0.2.7, the next libdevice release,
 libmorph 0.4.4), so they do not hold it up. The status stays `Draft`
 until the first commit that implements it.
+
+## Amendment — 2026-11-03 17:41 EST: implementation started
+
+Implementation of step 1 has started, on the owner's word of 2026-11-03
+("Yes, start on libmobile's text input options so the keyboard's key
+sends Enter"), for flankr's terminal view. The document is now immutable.
