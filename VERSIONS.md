@@ -303,3 +303,27 @@ Writing text to the clipboard
   bool`, `true` from Android 13, where the system confirms the copy
   itself), also in `android::clipboard`. `ClipboardError` is unchanged.
 
+## 0.4.0 — 2026-11-03 (tag `v0.4.0`)
+
+Soft keyboard options, the action key and dismissal
+(`docs/design/20261024_06_TEXT_INPUT_OPTIONS_PLAN.md`). A minor version:
+the keyboard of `set_text_input` behaves differently.
+
+- `libmobile::text_input` (also at the root and in
+  `android::text_input`): `TextInputOptions` (`#[non_exhaustive]`,
+  `Default`: `multiline: false`, `kind`, `action`, `autocorrect: true`);
+  `TextKind` (`#[non_exhaustive]`: `Text`, `Url`, `Email`, `Number`,
+  `Password`); `TextAction` (`#[non_exhaustive]`: `Done`, `Send`, `Go`,
+  `Search`, `None`).
+- `android::set_text_input_with(&AndroidApp, Option<&str>,
+  &TextInputOptions)`, also as `android::text_input::set_text_input_with`;
+  options changed while active are re-applied.
+- `MobileEvent::TextAction(TextAction)`: the action key, or Enter on one
+  line (soft or hardware keyboard); on many lines only with an action
+  other than `None`. `MobileEvent::TextInputDismissed`: the keyboard
+  closed while the field was active, once.
+- **Breaking** (behaviour): `set_text_input(app, v)` is
+  `set_text_input_with(app, v, &TextInputOptions::default())`. Its Done
+  key no longer closes the keyboard (it is `TextAction(Done)`, and the
+  keyboard stays up); the field asks for autocorrect; a landscape
+  keyboard no longer opens its full-screen editor.

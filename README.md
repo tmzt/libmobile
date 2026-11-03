@@ -425,6 +425,53 @@ if let Ok(copied) = clipboard::write_text(&app, &question) {
 }
 ```
 
+### Text input
+
+`android::set_text_input(&app, Some(value))` focuses an invisible field
+holding `value` and shows the soft keyboard; `None` hides it. The field
+owns the IME connection, so composition, autocorrect and voice input
+work while the app draws every pixel. `MobileEvent::TextChanged` carries
+the field's whole text after each edit, and `Insets::ime_bottom` the
+keyboard's height.
+
+`set_text_input_with(&app, value, &options)` asks for a keyboard with
+`libmobile::TextInputOptions`: `multiline`, `kind` (`TextKind::Text`,
+`Url`, `Email`, `Number`, `Password`), `action` (`TextAction::Done`,
+`Send`, `Go`, `Search`, or `None` for an Enter key) and `autocorrect`
+(`false` also turns suggestions off). The default is one line of text
+with Done and autocorrect; `set_text_input` uses it. New options while
+the keyboard is up are applied at once. The full-screen editor of a
+landscape keyboard is never used.
+
+- `MobileEvent::TextAction(action)`: the action key, or Enter on one line
+  (also with `TextAction::None` and from a hardware keyboard). The
+  keyboard stays up; the app hides it if it wants to. On many lines with
+  `TextAction::None`, Enter is a newline in `TextChanged` instead.
+- `MobileEvent::TextInputDismissed`: the user (Back, the keyboard's hide
+  key) or the system closed the keyboard while the field was active,
+  reported once. The field keeps its text and focus, so
+  `set_text_input_with(&app, Some(..), ..)` shows it again. Hiding it with
+  `None` reports nothing.
+
+```rust
+use libmobile::{MobileEvent, TextAction, TextInputOptions};
+use libmobile::android::set_text_input_with;
+
+// A terminal's keyboard: one line, Enter, no suggestions.
+let mut options = TextInputOptions::default();
+options.action = TextAction::None;
+options.autocorrect = false;
+set_text_input_with(&app, Some(""), &options);
+
+// In MobileApp::event:
+match event {
+    MobileEvent::TextChanged(text) => edited(&text),
+    MobileEvent::TextAction(_) => enter(),
+    MobileEvent::TextInputDismissed => keyboard_closed(),
+    _ => {}
+}
+```
+
 ### Images
 
 Feature `image-codec`: decoding and encoding through Android's own codecs,
@@ -637,7 +684,12 @@ every file in the app's `cache/codec-test/` (copied in with `adb push` and
 `run-as ... cp`), logging each result. `--es cmd media-pick`,
 `media-multi`, `media-camera`, `media-video`, `media-photo-picker` and
 `media-small` each make one `android::media::request_media` call, and each
-`MobileEvent::Media` is logged without its URIs or names.
+`MobileEvent::Media` is logged without its URIs or names. A still long
+press opens the keyboard with the next of nine options (text with Done, a
+URL with Go, the number pad, email with Send, a password, Search without
+autocorrect, one line with Enter, many lines, many lines with Send) and
+logs its name, each `TextChanged` (length and newlines, never the text),
+`TextAction` and `TextInputDismissed`; `--es cmd keyboard-close` hides it.
 
 ## Development
 
