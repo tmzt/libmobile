@@ -49,6 +49,13 @@
 //! `media-photo-picker` (the Photo Picker, up to three images) and
 //! `media-small` (one image under a 1 MiB cap). This example has no CAMERA
 //! in its manifest, so the camera entry asks for no permission.
+//!
+//! A long press (half a second, still) opens the soft keyboard
+//! (`android::set_text_input_with`) with the next of the options in
+//! `keyboards()`, logging their name; a long press while it is open moves to the
+//! next. It logs each `TextChanged` (its length and newlines, never the
+//! text), `TextAction` and `TextInputDismissed`. `--es cmd keyboard-close`
+//! hides it.
 
 /// The link a tap opens. Its query stands for a secret: libmobile's log cuts
 /// it off.
@@ -73,12 +80,60 @@ mod app {
     };
     use libmobile::android::{
         AndroidApp, InputStatus, MobileApp, build_info, night_mode, run, set_system_bar_icons,
+        set_text_input_with,
     };
+    use libmobile::text_input::{TextAction, TextInputOptions, TextKind};
     use std::time::{Duration, Instant};
 
     /// A press shorter than this, that moved less than [`TAP_SLOP`], is a tap.
     const TAP_TIME: Duration = Duration::from_millis(300);
     const TAP_SLOP: f32 = 24.0;
+    /// A still press this long opens the keyboard.
+    const LONG_PRESS: Duration = Duration::from_millis(500);
+
+    /// The keyboards a long press cycles through, by name.
+    fn keyboards() -> Vec<(&'static str, TextInputOptions)> {
+        let with = |multiline, kind, action, autocorrect| {
+            let mut o = TextInputOptions::default();
+            o.multiline = multiline;
+            o.kind = kind;
+            o.action = action;
+            o.autocorrect = autocorrect;
+            o
+        };
+        vec![
+            ("text, Done", TextInputOptions::default()),
+            ("url, Go", with(false, TextKind::Url, TextAction::Go, false)),
+            (
+                "number, Done",
+                with(false, TextKind::Number, TextAction::Done, false),
+            ),
+            (
+                "email, Send",
+                with(false, TextKind::Email, TextAction::Send, false),
+            ),
+            (
+                "password, Done",
+                with(false, TextKind::Password, TextAction::Done, false),
+            ),
+            (
+                "text, Search, no autocorrect",
+                with(false, TextKind::Text, TextAction::Search, false),
+            ),
+            (
+                "one line, Enter, no autocorrect",
+                with(false, TextKind::Text, TextAction::None, false),
+            ),
+            (
+                "many lines, newline",
+                with(true, TextKind::Text, TextAction::None, true),
+            ),
+            (
+                "many lines, Send",
+                with(true, TextKind::Text, TextAction::Send, true),
+            ),
+        ]
+    }
 
     /// The fixed text `--es cmd clipboard-write` copies (29 bytes). It is
     /// never logged, so a check can look for it in the whole log.
@@ -320,6 +375,18 @@ mod app {
         down: bool,
         /// Where and when the press started, while it can still be a tap.
         press: Option<(Instant, [f32; 2])>,
+        /// The next of `keyboards()` a long press opens.
+        keyboard: usize,
+    }
+
+    impl WgpuApp {
+        fn open_keyboard(&mut self, app: &AndroidApp) {
+            let keyboards = keyboards();
+            let (name, options) = &keyboards[self.keyboard % keyboards.len()];
+            self.keyboard += 1;
+            log::info!("wgpu example: keyboard: {name}");
+            set_text_input_with(app, Some(""), options);
+        }
     }
 
     impl MobileApp for WgpuApp {
@@ -338,6 +405,15 @@ mod app {
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
                 MobileEvent::Media(response) => log_media(response),
+                MobileEvent::TextChanged(text) => log::info!(
+                    "wgpu example: TextChanged: {} chars, {} newlines",
+                    text.chars().count(),
+                    text.matches('\n').count()
+                ),
+                MobileEvent::TextAction(action) => {
+                    log::info!("wgpu example: TextAction({action:?})")
+                }
+                MobileEvent::TextInputDismissed => log::info!("wgpu example: TextInputDismissed"),
                 MobileEvent::ConfigChanged => {
                     log::info!(
                         "wgpu example: ConfigChanged: night_mode {:?}",
@@ -370,6 +446,9 @@ mod app {
                             });
                         }
                         Some("clipboard") => log_clipboard(app),
+                        Some("keyboard-close") => {
+                            set_text_input_with(app, None, &TextInputOptions::default())
+                        }
                         Some("clipboard-write") => log::info!(
                             "wgpu example: clipboard write_text {:?}",
                             clipboard::write_text(app, CLIPBOARD_CHECK)
@@ -431,7 +510,15 @@ mod app {
             InputStatus::Handled
         }
 
-        fn tick(&mut self, _app: &AndroidApp) {
+        fn tick(&mut self, app: &AndroidApp) {
+            if self.down
+                && self
+                    .press
+                    .is_some_and(|(when, _)| when.elapsed() >= LONG_PRESS)
+            {
+                self.press = None;
+                self.open_keyboard(app);
+            }
             if !self.resumed {
                 return;
             }
@@ -481,6 +568,7 @@ mod app {
                 last_tick: Instant::now(),
                 down: false,
                 press: None,
+                keyboard: 0,
             },
         );
     }
