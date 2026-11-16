@@ -1286,4 +1286,22 @@ luma threshold from the frame, then fills only bounded short horizontal
 gaps whose dark runs on both sides overlap in the horizontal axis. It keeps
 the original frame as the decode fallback, so dimensions, coordinates, luma
 and exposure sampling, auto zoom, deduplication, worker freshness and payload
+ 
 redaction remain unchanged. No camera events or public API are changed.
+
+## 2026-11-16 13:34 EST — Support Mac terminal line spacing in QR frames
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`, camera QR
+terminal-gap normalization amendment. The owner's Mac screenshot shows the
+terminal font's blank inter-line spacing is seven to eight frame rows at the
+captured scale, so the existing two-row repair never reaches `rqrr`. The
+normalization bound will cover that observed spacing while retaining the
+overlap and contrast guards; the original frame remains the fallback.
+
+## 2026-11-16 13:48 EST — Make wider terminal QR repair opt-in
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`, camera QR
+terminal-gap normalization amendment. The wider eight-row repair is now
+controlled by `QrOptions::terminal_qr_compatibility`, whose default is
+`false`; the standard short-gap repair remains unchanged. The companion
+opts in because its pairing QR is rendered by a terminal.

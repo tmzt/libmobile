@@ -586,7 +586,7 @@ mod tests {
                 grey.data[y * 1280 + x] = if (x / 2 + y / 3) % 2 == 0 { 0 } else { 255 };
             }
         }
-        let scan = analyse(&mut Rqrr, &grey);
+        let scan = analyse(&mut Rqrr, &grey, false);
         let Target::Found(m) = scan.target else {
             panic!("{:?}", scan.target);
         };

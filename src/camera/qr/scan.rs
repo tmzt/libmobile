@@ -7,11 +7,11 @@
 
 use super::{QR_RETRY_MODULE_PX, QR_SAT_FRACTION, QR_SAT_LEVEL, QR_SAT_MEAN};
 
-/// A screen's terminal renderer can leave a narrow bright row between dark
-/// blobs. Keep this repair deliberately conservative: it must not turn an
-/// ordinary QR's white modules into dark pixels.
-const QR_GAP_MIN_CONTRAST: u8 = 24;
+/// A screen's terminal renderer can leave a bounded bright inter-line gap
+/// between dark blobs. Keep this repair deliberately conservative: it must not
+/// turn an ordinary QR's white modules into dark pixels.
 const QR_GAP_MAX_ROWS: usize = 2;
+const QR_TERMINAL_GAP_MAX_ROWS: usize = 8;
 const QR_GAP_MIN_OVERLAP_PX: usize = 3;
 const QR_GAP_MIN_OVERLAP_FRACTION: f32 = 0.6;
 
@@ -34,13 +34,16 @@ impl GreyFrame {
     ///
     /// The threshold is derived from this frame's luma range, rather than a
     /// camera-specific level. Only the intersection of similarly wide blobs
-    /// is filled, and only when every pixel in the intersection is bright in
-    /// the intervening rows. This leaves a flat frame and ordinary QR pixels
-    /// alone.
+    /// is filled, and only when every pixel in the intervening rows is bright
+    /// in the standard mode. Terminal compatibility additionally requires
+    /// those rows to contain no other dark spans and allows wider gaps. This
+    /// leaves a flat frame and ordinary QR pixels alone.
     fn normalized(&self) -> Option<GreyFrame> {
-        let Some(pixels) = self.width.checked_mul(self.height) else {
-            return None;
-        };
+        self.normalized_with(false)
+    }
+
+    fn normalized_with(&self, terminal_qr_compatibility: bool) -> Option<GreyFrame> {
+        let pixels = self.width.checked_mul(self.height)?;
         if self.width == 0 || self.height == 0 || self.data.len() < pixels {
             return None;
         }
@@ -78,10 +81,15 @@ impl GreyFrame {
             })
             .collect::<Vec<_>>();
 
+        let max_gap_rows = if terminal_qr_compatibility {
+            QR_TERMINAL_GAP_MAX_ROWS
+        } else {
+            QR_GAP_MAX_ROWS
+        };
         let mut repaired = self.clone();
         for y0 in 0..self.height {
             let y1_end = y0
-                .saturating_add(QR_GAP_MAX_ROWS + 1)
+                .saturating_add(max_gap_rows + 1)
                 .min(self.height.saturating_sub(1));
             for y1 in y0 + 2..=y1_end {
                 for &(a0, a1) in &spans[y0] {
@@ -90,9 +98,14 @@ impl GreyFrame {
                         let x1 = a1.min(b1);
                         let overlap = x1.saturating_sub(x0);
                         let narrower = (a1 - a0).min(b1 - b0);
+                        let gap_is_valid = if terminal_qr_compatibility {
+                            (y0 + 1..y1).all(|y| spans[y].is_empty())
+                        } else {
+                            (y0 + 1..y1).all(|y| (x0..x1).all(|x| self.at(x, y) > threshold))
+                        };
                         if overlap < QR_GAP_MIN_OVERLAP_PX
                             || (overlap as f32) < narrower as f32 * QR_GAP_MIN_OVERLAP_FRACTION
-                            || !(y0 + 1..y1).all(|y| (x0..x1).all(|x| self.at(x, y) > threshold))
+                            || !gap_is_valid
                         {
                             continue;
                         }
@@ -346,16 +359,20 @@ pub(crate) struct Scan {
     pub luma: Option<Luma>,
 }
 
-/// Scan `grey` with `decoder`. A repaired terminal-style frame is tried
-/// first; when it does not decode, the original frame remains the fallback.
-/// When a code is found with modules of at least `QR_RETRY_MODULE_PX` but
-/// nothing decodes, the selected frame is scanned again box-filtered 2 × 2,
-/// once.
-pub(crate) fn analyse(decoder: &mut dyn Decoder, grey: &GreyFrame) -> Scan {
+/// Scan `grey` with `decoder`. When `terminal_qr_compatibility` is enabled,
+/// the analyzer also tries the wider terminal line-spacing repair; when it
+/// does not decode, the original frame remains the fallback. When a code is
+/// found with modules of at least `QR_RETRY_MODULE_PX` but nothing decodes,
+/// the selected frame is scanned again box-filtered 2 × 2, once.
+pub(crate) fn analyse(
+    decoder: &mut dyn Decoder,
+    grey: &GreyFrame,
+    terminal_qr_compatibility: bool,
+) -> Scan {
     let measure = |d: &Detection| Measure::of(&d.corners(), d.modules(), grey.width, grey.height);
     let decoded = |v: &[Detection]| v.iter().any(|d| matches!(d, Detection::Decoded { .. }));
     let mut found;
-    if let Some(normalized) = grey.normalized() {
+    if let Some(normalized) = grey.normalized_with(terminal_qr_compatibility) {
         found = decoder.scan(&normalized);
         if !decoded(&found) {
             found = decoder.scan(grey);
@@ -486,7 +503,7 @@ pub(crate) mod tests {
         for module in [3usize, 4, 6, 10] {
             let side = (n + 8) * module;
             let grey = render(payload, module, (side + 40, side + 20), (20, 10));
-            let scan = analyse(&mut Rqrr, &grey);
+            let scan = analyse(&mut Rqrr, &grey, false);
             assert_eq!(scan.codes.len(), 1, "module {module}");
             assert_eq!(scan.codes[0].bytes, payload.as_bytes());
             let Target::Decoded(m) = scan.target else {
@@ -507,7 +524,7 @@ pub(crate) mod tests {
             height: 48,
             data: vec![128; 64 * 48],
         };
-        let scan = analyse(&mut Rqrr, &grey);
+        let scan = analyse(&mut Rqrr, &grey, false);
         assert_eq!(scan.target, Target::Missed);
         assert!(scan.codes.is_empty());
         assert_eq!(scan.luma.unwrap().mean, 128.0);
@@ -596,7 +613,7 @@ pub(crate) mod tests {
             "{direct:?}"
         );
         // With it, the halved frame reads, and corners are in full pixels.
-        let scan = analyse(&mut Rqrr, &grey);
+        let scan = analyse(&mut Rqrr, &grey, false);
         assert_eq!(scan.codes.len(), 1, "{:?}", scan.target);
         assert_eq!(scan.codes[0].bytes, payload.as_bytes());
         let Target::Decoded(m) = scan.target else {
@@ -656,10 +673,10 @@ pub(crate) mod tests {
 
         let mut over_limit = GreyFrame {
             width: 24,
-            height: 8,
-            data: vec![220; 24 * 8],
+            height: 14,
+            data: vec![220; 24 * 14],
         };
-        for y in [1, 5] {
+        for y in [1, 11] {
             for x in 4..20 {
                 over_limit.data[y * 24 + x] = 20;
             }
@@ -675,17 +692,21 @@ pub(crate) mod tests {
         let at = (20, 20);
         let clean = render(payload, module, (side + 40, side + 40), at);
         let mut damaged = clean.clone();
-        // Blank one row inside a dark finder-pattern module. The rows on both
-        // sides retain the same horizontal blobs, like a terminal gap.
-        let y = at.1 + (4 + 1) * module + 1;
-        for x in at.0 + 4 * module..at.0 + (modules_of(payload) + 4) * module {
-            damaged.data[y * damaged.width + x] = 220;
+        // Blank the inter-line gap inside a dark finder-pattern module. The
+        // rows on both sides retain the same horizontal blobs, like the
+        // terminal's line spacing in a captured Mac screenshot.
+        let y0 = at.1 + (4 + 1) * module + 1;
+        for y in y0..y0 + 7 {
+            for x in at.0 + 4 * module..at.0 + (modules_of(payload) + 4) * module {
+                damaged.data[y * damaged.width + x] = 220;
+            }
         }
-        assert!(damaged.normalized().is_some());
+        assert!(damaged.normalized_with(true).is_some());
+        assert!(damaged.normalized().is_none());
 
-        let clean_scan = analyse(&mut Rqrr, &clean);
+        let clean_scan = analyse(&mut Rqrr, &clean, true);
         assert_eq!(clean_scan.codes[0].bytes, payload.as_bytes());
-        let repaired_scan = analyse(&mut Rqrr, &damaged);
+        let repaired_scan = analyse(&mut Rqrr, &damaged, true);
         assert_eq!(repaired_scan.codes[0].bytes, payload.as_bytes());
         assert_eq!(
             (repaired_scan.width, repaired_scan.height),

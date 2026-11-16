@@ -19,6 +19,7 @@ pub(super) struct Job {
     pub session: SessionId,
     pub epoch: u64,
     pub grey: GreyFrame,
+    pub terminal_qr_compatibility: bool,
 }
 
 static SLOT: Mutex<Option<Job>> = Mutex::new(None);
@@ -57,7 +58,7 @@ fn run() {
             }
         };
         let started = Instant::now();
-        let scan = analyse(&mut decoder, &job.grey);
+        let scan = analyse(&mut decoder, &job.grey, job.terminal_qr_compatibility);
         times.push(started.elapsed());
         if times.len() == TIMING_WINDOW {
             times.sort();

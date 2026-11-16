@@ -949,6 +949,7 @@ impl Worker {
                     height: planes.height,
                     data: convert::pack_gray(&planes),
                 },
+                terminal_qr_compatibility: q.options.terminal_qr_compatibility,
             });
         }
         if let Some(s) = self

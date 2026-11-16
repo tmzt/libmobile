@@ -338,3 +338,13 @@ events and public APIs remain unchanged.
 - The private camera QR analyzer repairs only bounded short horizontal gaps
   between overlapping dark blobs before `rqrr`, and falls back to the
   original frame when the repaired frame does not decode.
+
+## 0.5.1 — 2026-11-16 (tag `v0.5.1`)
+
+Camera QR terminal line-spacing compatibility
+(`docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`). The QR options
+now add `terminal_qr_compatibility`, defaulting to `false`; callers opt in to
+the wider eight-row repair. The standard short-gap repair remains the default.
+
+- Added the `QrOptions::terminal_qr_compatibility` setting for terminal
+  screenshots with wider blank line spacing.
