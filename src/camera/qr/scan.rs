@@ -7,6 +7,14 @@
 
 use super::{QR_RETRY_MODULE_PX, QR_SAT_FRACTION, QR_SAT_LEVEL, QR_SAT_MEAN};
 
+/// A screen's terminal renderer can leave a narrow bright row between dark
+/// blobs. Keep this repair deliberately conservative: it must not turn an
+/// ordinary QR's white modules into dark pixels.
+const QR_GAP_MIN_CONTRAST: u8 = 24;
+const QR_GAP_MAX_ROWS: usize = 2;
+const QR_GAP_MIN_OVERLAP_PX: usize = 3;
+const QR_GAP_MIN_OVERLAP_FRACTION: f32 = 0.6;
+
 /// A greyscale image, rows packed: the analysis stream's Y plane as the
 /// sensor delivers it (not turned upright).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +28,86 @@ pub(crate) struct GreyFrame {
 impl GreyFrame {
     fn at(&self, x: usize, y: usize) -> u8 {
         self.data[y * self.width + x]
+    }
+
+    /// Repair short bright rows that split one horizontal dark blob into two.
+    ///
+    /// The threshold is derived from this frame's luma range, rather than a
+    /// camera-specific level. Only the intersection of similarly wide blobs
+    /// is filled, and only when every pixel in the intersection is bright in
+    /// the intervening rows. This leaves a flat frame and ordinary QR pixels
+    /// alone.
+    fn normalized(&self) -> Option<GreyFrame> {
+        let Some(pixels) = self.width.checked_mul(self.height) else {
+            return None;
+        };
+        if self.width == 0 || self.height == 0 || self.data.len() < pixels {
+            return None;
+        }
+
+        let (min_luma, max_luma) = self.data[..pixels]
+            .iter()
+            .copied()
+            .fold((u8::MAX, u8::MIN), |(min, max), value| {
+                (min.min(value), max.max(value))
+            });
+        let contrast = max_luma - min_luma;
+        if contrast < QR_GAP_MIN_CONTRAST {
+            return None;
+        }
+        // The midpoint separates the two dominant sides of a screen image,
+        // while still adapting to exposure and dark terminal backgrounds.
+        let threshold = min_luma.saturating_add(contrast / 2);
+        let spans = (0..self.height)
+            .map(|y| {
+                let mut row = Vec::new();
+                let mut x = 0;
+                while x < self.width {
+                    while x < self.width && self.at(x, y) > threshold {
+                        x += 1;
+                    }
+                    let start = x;
+                    while x < self.width && self.at(x, y) <= threshold {
+                        x += 1;
+                    }
+                    if start < x {
+                        row.push((start, x));
+                    }
+                }
+                row
+            })
+            .collect::<Vec<_>>();
+
+        let mut repaired = self.clone();
+        for y0 in 0..self.height {
+            let y1_end = y0
+                .saturating_add(QR_GAP_MAX_ROWS + 1)
+                .min(self.height.saturating_sub(1));
+            for y1 in y0 + 2..=y1_end {
+                for &(a0, a1) in &spans[y0] {
+                    for &(b0, b1) in &spans[y1] {
+                        let x0 = a0.max(b0);
+                        let x1 = a1.min(b1);
+                        let overlap = x1.saturating_sub(x0);
+                        let narrower = (a1 - a0).min(b1 - b0);
+                        if overlap < QR_GAP_MIN_OVERLAP_PX
+                            || (overlap as f32)
+                                < narrower as f32 * QR_GAP_MIN_OVERLAP_FRACTION
+                            || !(y0 + 1..y1)
+                                .all(|y| (x0..x1).all(|x| self.at(x, y) > threshold))
+                        {
+                            continue;
+                        }
+                        for y in y0 + 1..y1 {
+                            for x in x0..x1 {
+                                repaired.data[y * self.width + x] = min_luma;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        (repaired != *self).then_some(repaired)
     }
 
     /// The frame box-filtered 2 × 2 (half the size, each pixel the mean of
@@ -260,13 +348,23 @@ pub(crate) struct Scan {
     pub luma: Option<Luma>,
 }
 
-/// Scan `grey` with `decoder`. When a code is found with modules of at
-/// least `QR_RETRY_MODULE_PX` but nothing decodes, the frame is scanned
-/// again box-filtered 2 × 2, once.
+/// Scan `grey` with `decoder`. A repaired terminal-style frame is tried
+/// first; when it does not decode, the original frame remains the fallback.
+/// When a code is found with modules of at least `QR_RETRY_MODULE_PX` but
+/// nothing decodes, the selected frame is scanned again box-filtered 2 × 2,
+/// once.
 pub(crate) fn analyse(decoder: &mut dyn Decoder, grey: &GreyFrame) -> Scan {
     let measure = |d: &Detection| Measure::of(&d.corners(), d.modules(), grey.width, grey.height);
-    let mut found = decoder.scan(grey);
     let decoded = |v: &[Detection]| v.iter().any(|d| matches!(d, Detection::Decoded { .. }));
+    let mut found;
+    if let Some(normalized) = grey.normalized() {
+        found = decoder.scan(&normalized);
+        if !decoded(&found) {
+            found = decoder.scan(grey);
+        }
+    } else {
+        found = decoder.scan(grey);
+    }
     if !decoded(&found)
         && found
             .iter()
@@ -507,6 +605,92 @@ pub(crate) mod tests {
             panic!("{:?}", scan.target);
         };
         assert!((m.module_px - module as f32).abs() < 1.0, "{}", m.module_px);
+    }
+
+    #[test]
+    fn terminal_gap_normalization_is_adaptive_and_bounded() {
+        let flat = GreyFrame {
+            width: 24,
+            height: 16,
+            data: vec![128; 24 * 16],
+        };
+        assert_eq!(flat.normalized(), None);
+
+        let payload = "https://example.com/pair?k=ordinary";
+        let side = (modules_of(payload) + 8) * 3;
+        let ordinary = render(payload, 3, (side + 12, side + 12), (6, 6));
+        assert_eq!(ordinary.normalized(), None);
+
+        let mut gaps = GreyFrame {
+            width: 24,
+            height: 16,
+            data: vec![220; 24 * 16],
+        };
+        for y in [2, 5, 8, 10] {
+            for x in 4..20 {
+                gaps.data[y * gaps.width + x] = 20;
+            }
+        }
+        let repaired = gaps.normalized().expect("short overlapping gaps");
+        assert_eq!((repaired.width, repaired.height), (gaps.width, gaps.height));
+        assert_eq!(repaired.data.len(), gaps.data.len());
+        for y in [3, 4, 6, 7, 9] {
+            assert!(repaired.data[y * repaired.width + 4..y * repaired.width + 20]
+                .iter()
+                .all(|&v| v == 20));
+        }
+        assert_eq!(repaired.data[0], gaps.data[0]);
+
+        let mut non_overlapping = GreyFrame {
+            width: 24,
+            height: 8,
+            data: vec![220; 24 * 8],
+        };
+        for x in 1..8 {
+            non_overlapping.data[24 + x] = 20;
+        }
+        for x in 12..20 {
+            non_overlapping.data[3 * 24 + x] = 20;
+        }
+        assert_eq!(non_overlapping.normalized(), None);
+
+        let mut over_limit = GreyFrame {
+            width: 24,
+            height: 8,
+            data: vec![220; 24 * 8],
+        };
+        for y in [1, 5] {
+            for x in 4..20 {
+                over_limit.data[y * 24 + x] = 20;
+            }
+        }
+        assert_eq!(over_limit.normalized(), None);
+    }
+
+    #[test]
+    fn terminal_gap_repair_keeps_pairing_payload_decodable() {
+        let payload = "flankr://pair?token=0123456789abcdef";
+        let module = 6;
+        let side = (modules_of(payload) + 8) * module;
+        let at = (20, 20);
+        let clean = render(payload, module, (side + 40, side + 40), at);
+        let mut damaged = clean.clone();
+        // Blank one row inside a dark finder-pattern module. The rows on both
+        // sides retain the same horizontal blobs, like a terminal gap.
+        let y = at.1 + (4 + 1) * module + 1;
+        for x in at.0 + 4 * module..at.0 + (modules_of(payload) + 4) * module {
+            damaged.data[y * damaged.width + x] = 220;
+        }
+        assert!(damaged.normalized().is_some());
+
+        let clean_scan = analyse(&mut Rqrr, &clean);
+        assert_eq!(clean_scan.codes[0].bytes, payload.as_bytes());
+        let repaired_scan = analyse(&mut Rqrr, &damaged);
+        assert_eq!(repaired_scan.codes[0].bytes, payload.as_bytes());
+        assert_eq!(
+            (repaired_scan.width, repaired_scan.height),
+            (damaged.width, damaged.height)
+        );
     }
 
     #[test]

@@ -327,3 +327,14 @@ the keyboard of `set_text_input` behaves differently.
   key no longer closes the keyboard (it is `TextAction(Done)`, and the
   keyboard stays up); the field asks for autocorrect; a landscape
   keyboard no longer opens its full-screen editor.
+
+## 0.5.0 — 2026-11-16 (tag `v0.5.0`)
+
+Camera QR terminal-gap normalization
+(`docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md`). A minor version:
+QR scanning behavior changes for terminal-style frames, while all camera
+events and public APIs remain unchanged.
+
+- The private camera QR analyzer repairs only bounded short horizontal gaps
+  between overlapping dark blobs before `rqrr`, and falls back to the
+  original frame when the repaired frame does not decode.

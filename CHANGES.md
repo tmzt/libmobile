@@ -1274,3 +1274,16 @@ Open: step 1's **Done when** on the owner's S23 (each kind's keyboard,
 Done and Send logged, Back as `TextInputDismissed`, newlines on many
 lines, no suggestions without autocorrect). The plan stays
 `In implementation` until then.
+
+## 2026-11-16 — camera QR terminal-gap normalization amendment
+
+Plan: `docs/design/20261028_01_CAMERA_CAPTURE_AND_QR_PLAN.md` (immutable
+after its implementation-start amendment).
+
+The camera QR implementation adds a private host-testable normalization pass
+for terminal-style blank horizontal gaps before `rqrr`. It derives a dark
+luma threshold from the frame, then fills only bounded short horizontal
+gaps whose dark runs on both sides overlap in the horizontal axis. It keeps
+the original frame as the decode fallback, so dimensions, coordinates, luma
+and exposure sampling, auto zoom, deduplication, worker freshness and payload
+redaction remain unchanged. No camera events or public API are changed.
