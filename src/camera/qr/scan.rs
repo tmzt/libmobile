@@ -91,10 +91,8 @@ impl GreyFrame {
                         let overlap = x1.saturating_sub(x0);
                         let narrower = (a1 - a0).min(b1 - b0);
                         if overlap < QR_GAP_MIN_OVERLAP_PX
-                            || (overlap as f32)
-                                < narrower as f32 * QR_GAP_MIN_OVERLAP_FRACTION
-                            || !(y0 + 1..y1)
-                                .all(|y| (x0..x1).all(|x| self.at(x, y) > threshold))
+                            || (overlap as f32) < narrower as f32 * QR_GAP_MIN_OVERLAP_FRACTION
+                            || !(y0 + 1..y1).all(|y| (x0..x1).all(|x| self.at(x, y) > threshold))
                         {
                             continue;
                         }
@@ -635,9 +633,11 @@ pub(crate) mod tests {
         assert_eq!((repaired.width, repaired.height), (gaps.width, gaps.height));
         assert_eq!(repaired.data.len(), gaps.data.len());
         for y in [3, 4, 6, 7, 9] {
-            assert!(repaired.data[y * repaired.width + 4..y * repaired.width + 20]
-                .iter()
-                .all(|&v| v == 20));
+            assert!(
+                repaired.data[y * repaired.width + 4..y * repaired.width + 20]
+                    .iter()
+                    .all(|&v| v == 20)
+            );
         }
         assert_eq!(repaired.data[0], gaps.data[0]);
 
