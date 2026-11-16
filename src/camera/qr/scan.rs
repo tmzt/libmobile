@@ -10,6 +10,7 @@ use super::{QR_RETRY_MODULE_PX, QR_SAT_FRACTION, QR_SAT_LEVEL, QR_SAT_MEAN};
 /// A screen's terminal renderer can leave a bounded bright inter-line gap
 /// between dark blobs. Keep this repair deliberately conservative: it must not
 /// turn an ordinary QR's white modules into dark pixels.
+const QR_GAP_MIN_CONTRAST: u8 = 24;
 const QR_GAP_MAX_ROWS: usize = 2;
 const QR_TERMINAL_GAP_MAX_ROWS: usize = 8;
 const QR_GAP_MIN_OVERLAP_PX: usize = 3;

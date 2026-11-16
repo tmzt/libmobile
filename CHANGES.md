@@ -1305,3 +1305,8 @@ terminal-gap normalization amendment. The wider eight-row repair is now
 controlled by `QrOptions::terminal_qr_compatibility`, whose default is
 `false`; the standard short-gap repair remains unchanged. The companion
 opts in because its pairing QR is rendered by a terminal.
+
+## 2026-11-16 15:17 EST — Fix the camera QR feature build
+
+The `camera-qr` feature now includes the contrast threshold constant used by
+its QR normalizer. The QR API and runtime behavior are unchanged.

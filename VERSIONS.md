@@ -348,3 +348,8 @@ the wider eight-row repair. The standard short-gap repair remains the default.
 
 - Added the `QrOptions::terminal_qr_compatibility` setting for terminal
   screenshots with wider blank line spacing.
+
+## 0.5.2 — 2026-11-16 (tag `v0.5.2`)
+
+Fixed the `camera-qr` feature build by restoring its contrast threshold
+constant. The QR API and runtime behavior are unchanged.
