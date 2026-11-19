@@ -300,3 +300,38 @@ released first, otherwise 0.5.3; tagged and entered in `VERSIONS.md`.
 - **Emulated shared storage.** `/storage/emulated/0` is a FUSE view of
   `/data/media`; `statvfs` there reports the backing `/data` volume, which
   is what ShotToss wants. The example logs both to confirm it.
+
+## Amendment — 2026-11-19 18:32 EST: the platform-free part becomes an engine file shared with libdevice
+
+The owner decided on 2026-11-19, through the ShotToss coordinator, that the
+desktop half is built in libdevice and must "share API with libmorph"
+(libdevice `docs/design/20261119_01_DISK_SPACE_PLAN.md`, Draft). That
+answer is the agreement for this amendment. It replaces the following:
+
+- **Sections 3 and 4.1, where the platform-free code lives.** Everything
+  that section 3 put in `src/disk_space.rs` and section 4.1 added
+  (`DiskSpace`, `DiskSpaceError`, `statvfs_space`, `DiskPressure`,
+  `DiskThresholds` with `DEFAULT` and `grade`, `DiskPressureReport`), and
+  section 4.2's `DISK_CHECK_INTERVAL`, `_MIN`, `_MAX`, goes into
+  `src/disk_space/engine.rs`. That file is byte-identical with libdevice's,
+  ends with `#[doc(hidden)] pub const ENGINE_SOURCE: &str =
+  include_str!("engine.rs");`, and holds its own tests, as the key store
+  engine does. `src/disk_space.rs` becomes `mod engine; pub use
+  engine::*;`. A change to the engine is made here first and copied to
+  libdevice in the same release cycle; libmorph's test compares the two
+  `ENGINE_SOURCE`s.
+- **The engine's API, as libdevice's plan section 3 states it.** Added to
+  what this plan named: `DiskSpaceError::Unsupported` (non-Unix hosts;
+  never on Android), `DiskThresholds::new`, `DiskThresholds::low_threshold`,
+  `DiskPressureReport::new` (the structs are `#[non_exhaustive]`) and
+  `clamp_interval`. `statvfs_space` is under `#[cfg(unix)]`, `Unsupported`
+  elsewhere, and `libc` becomes a `cfg(unix)` optional dependency.
+- **Section 5's test list** is replaced, for the engine, by libdevice's
+  plan section 5 (space on a temp dir, the full grading table with
+  hysteresis, the interval clamp), which this crate runs too because the
+  file is the same.
+- **Step 1's Done when** gains: the engine's tests pass here with
+  `cargo test -p libmobile --features disk-space` on the host.
+
+Nothing else changes: the Kotlin timer, `android::disk_space::{space,
+watch, unwatch, check_now}`, `MobileEvent::DiskPressure` and the version.
