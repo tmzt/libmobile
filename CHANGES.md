@@ -1310,3 +1310,9 @@ opts in because its pairing QR is rendered by a terminal.
 
 The `camera-qr` feature now includes the contrast threshold constant used by
 its QR normalizer. The QR API and runtime behavior are unchanged.
+
+## 2026-11-19 18:18 EST — All files access and media scans, planned
+
+Plan: [All files access, the shared storage root, and telling MediaStore about changed files](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) (Draft).
+
+Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's instruction that generic JNI such as access checks belongs in libmobile and libmorph: features `all-files-access` and `media-scan`, and `Project::all_files_access()`, for 0.5.3. No code until the owner approves the plan.
