@@ -1316,3 +1316,9 @@ its QR normalizer. The QR API and runtime behavior are unchanged.
 Plan: [All files access, the shared storage root, and telling MediaStore about changed files](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) (Draft).
 
 Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's instruction that generic JNI such as access checks belongs in libmobile and libmorph: features `all-files-access` and `media-scan`, and `Project::all_files_access()`, for 0.5.3. No code until the owner approves the plan.
+
+## 2026-11-19 18:25 EST — Disk space and disk pressure, planned
+
+Plan: [Free space, the cache quota, and disk pressure reported when it changes](docs/design/20261119_02_DISK_SPACE_PLAN.md) (Draft).
+
+Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) after the owner said disk and memory pressure might be valuable as libmorph/libmobile plans: a `disk-space` feature with a graded `DiskPressure` delivered as `MobileEvent::DiskPressure` from a slow Kotlin timer while resumed. No code until the owner approves the plan.
