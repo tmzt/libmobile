@@ -335,3 +335,77 @@ answer is the agreement for this amendment. It replaces the following:
 
 Nothing else changes: the Kotlin timer, `android::disk_space::{space,
 watch, unwatch, check_now}`, `MobileEvent::DiskPressure` and the version.
+
+## Amendment — 2026-11-19 18:35 EST: low-level readings only; grading moves to libmorph; the Kotlin timer posts raw readings
+
+The owner decided on 2026-11-19, through the ShotToss coordinator
+(verbatim): "we can provide the low-level API in libmobile/libdevice and
+the high-level grading in libmorph, this doesn't have the security
+considerations of keystore (which is what the source-level checks are
+for)". That answer is the agreement for this amendment.
+
+**It replaces the whole of the amendment of 2026-11-19 18:32 EST** ("the
+platform-free part becomes an engine file shared with libdevice"): there
+is no engine file, no `src/disk_space/engine.rs`, no `ENGINE_SOURCE`, no
+identity test and no copying to libdevice. libmobile's types are its own
+and need not match libdevice's byte for byte.
+
+It also replaces, in the original text:
+
+- **Section 4.1, "The grade", entirely.** `DiskPressure`, `DiskThresholds`
+  (with `DEFAULT` and `grade`) and `DiskPressureReport` are removed from
+  libmobile. They are libmorph's (its disk pressure plan, amended the same
+  day).
+- **Section 4.2's constants.** `DISK_CHECK_INTERVAL`, `_MIN` and `_MAX`
+  are removed; the interval's default (60 s) and bounds (15 s to 600 s)
+  are libmorph's. libmobile takes whatever interval it is given, with a
+  floor of 1 s of its own so a zero cannot spin the main looper. The
+  rest of 4.2 stands: the check never runs per tick or per frame; it runs
+  once on resume, then every interval from a `Handler` on the main looper
+  while the activity is resumed, with `onPause` removing it; the only
+  per-tick cost is draining one more `mailbox::Latest` slot.
+- **Section 4.3, the Android pieces**, by:
+
+  ```rust
+  // src/android/disk_space.rs
+  /// Read the volume holding `path` (files_dir when None) on resume and
+  /// every `interval` while resumed, posting each reading. Replaces an
+  /// earlier watch. Any thread.
+  pub fn watch(path: Option<&Path>, interval: Duration) -> Result<(), DiskSpaceError>;
+  /// Stop: the timer is removed, nothing more is posted.
+  pub fn unwatch();
+  ```
+
+  `nativeDiskCheck` runs `statvfs_space` on the watched path and posts
+  the `DiskSpace` (`allocatable` and `cache_quota` `None`) into
+  `static PENDING: Latest<DiskSpace>` on **every** check; nothing is
+  compared or graded here. `pump_bridges` delivers it as
+  `MobileEvent::DiskSpace(DiskSpace)` (in place of
+  `MobileEvent::DiskPressure(DiskPressureReport)`). One event per
+  interval, 60 s by default, is the whole cost; libmorph grades it and
+  calls its hook only on a change. `check_now` is removed: an app or
+  libmorph wanting a reading now calls `statvfs_space` or `space`
+  directly.
+- **Section 1's last sentence**: libmobile reports readings; it does not
+  say how short of space the volume is. The title, which says "disk
+  pressure reported when it changes", is superseded by this: the plan
+  gives free space, the cache quota and periodic readings.
+- **Section 5's test list**: the grading tests are removed (they move to
+  libmorph); `statvfs_space`'s tests (temp dir, missing path, saturating
+  products) stay, and a host test of the interval floor is added.
+- **Step 1's Done when**: the `disk-watch --es critical` checks are
+  replaced by: `--es cmd disk-watch` logs one `MobileEvent::DiskSpace`
+  at once and one per 60 s while resumed, none in 5 minutes in the
+  background, and one on return.
+
+**Why the Kotlin timer stays here rather than a libmorph timer calling
+`space()`**: libmobile's main looper is not libmorph's loop thread, so
+the reading never runs on the thread that draws frames, and its lifecycle
+(resumed, paused) is the activity's own, through the plugin hooks, with
+no second copy of that state in libmorph; and it is the callback pattern
+the owner pointed to. The reading on the timer is `statvfs` only
+(microseconds); `StorageManager.getAllocatableBytes` may block for tens
+of milliseconds in the storage service, so it stays out of any timer and
+runs only when an app calls `space`.
+
+Versioning stands: additive, a patch release.
