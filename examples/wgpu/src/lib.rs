@@ -58,6 +58,14 @@
 //! `NotDeclared`. `--es cmd media-scan --es path <path>` asks MediaStore to
 //! scan that path (`android::media_scan::scan_paths`) and logs the result.
 //!
+//! `--es cmd disk-space`, on a thread of its own, logs
+//! `android::disk_space::space` of `files_dir` and of
+//! `/storage/emulated/0`, with each call's time. `--es cmd disk-watch`
+//! (optionally `--es interval <seconds>`, 60 by default) watches
+//! `files_dir` (`android::disk_space::watch`) and logs each
+//! `MobileEvent::DiskSpace`; `disk-unwatch` stops it. libmobile's own
+//! `disk check` line is logged at debug.
+//!
 //! A long press (half a second, still) opens the soft keyboard
 //! (`android::set_text_input_with`) with the next of the options in
 //! `keyboards()`, logging their name; a long press while it is open moves to the
@@ -82,6 +90,7 @@ mod app {
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::clipboard;
     use libmobile::android::dirs;
+    use libmobile::android::disk_space;
     use libmobile::android::image_codec::{self, Encoding};
     use libmobile::android::link::open_link;
     use libmobile::android::media::{
@@ -371,6 +380,37 @@ mod app {
         });
     }
 
+    /// `--es cmd disk-space`: `space` of the files directory and of the
+    /// shared volume, timed. Not on the main loop's thread: it may block.
+    fn log_disk_space() {
+        let shared = std::path::PathBuf::from("/storage/emulated/0");
+        for (name, path) in [("files_dir", dirs::files_dir()), ("shared", Some(shared))] {
+            let Some(path) = path else {
+                log::warn!("wgpu example: disk-space {name}: no path");
+                continue;
+            };
+            let started = Instant::now();
+            let space = disk_space::space(&path);
+            let took = started.elapsed();
+            let started = Instant::now();
+            let statvfs = disk_space::statvfs_space(&path);
+            log::info!(
+                "wgpu example: disk-space {name} {}: space {space:?} in {} us; statvfs alone {} us",
+                path.display(),
+                took.as_micros(),
+                started.elapsed().as_micros(),
+            );
+            if let (Ok(s), Ok(v)) = (&space, &statvfs) {
+                log::info!(
+                    "wgpu example: disk-space {name}: allocatable >= free: {:?}, cache_quota > 0: {:?}, statvfs free {}",
+                    s.allocatable.map(|a| a >= s.free),
+                    s.cache_quota.map(|q| q > 0),
+                    v.free
+                );
+            }
+        }
+    }
+
     /// `--es cmd files-access`, and on each `Resume`.
     fn log_files_access() {
         log::info!(
@@ -427,6 +467,7 @@ mod app {
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
                 MobileEvent::Media(response) => log_media(response),
+                MobileEvent::DiskSpace(space) => log::info!("wgpu example: DiskSpace({space:?})"),
                 MobileEvent::TextChanged(text) => log::info!(
                     "wgpu example: TextChanged: {} chars, {} newlines",
                     text.chars().count(),
@@ -475,6 +516,23 @@ mod app {
                             "wgpu example: clipboard write_text {:?}",
                             clipboard::write_text(app, CLIPBOARD_CHECK)
                         ),
+                        Some("disk-space") => {
+                            std::thread::spawn(log_disk_space);
+                        }
+                        Some("disk-watch") => {
+                            let seconds = intent
+                                .extra("interval")
+                                .and_then(|s| s.parse().ok())
+                                .unwrap_or(60);
+                            log::info!(
+                                "wgpu example: disk-watch every {seconds} s: {:?}",
+                                disk_space::watch(None, Duration::from_secs(seconds))
+                            );
+                        }
+                        Some("disk-unwatch") => {
+                            disk_space::unwatch();
+                            log::info!("wgpu example: disk-unwatch");
+                        }
                         Some("files-access") => log_files_access(),
                         Some("files-access-open") => log::info!(
                             "wgpu example: files-access-open {:?}",
@@ -584,7 +642,9 @@ mod app {
                 // libmobile's `open link` line is at debug level.
                 .with_filter(
                     android_logger::FilterBuilder::new()
-                        .parse("info,libmobile::android::link=debug")
+                        .parse(
+                            "info,libmobile::android::link=debug,libmobile::android::disk_space=debug",
+                        )
                         .build(),
                 )
                 .with_tag("libmobile-wgpu"),
