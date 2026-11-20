@@ -41,6 +41,8 @@ android/java/dev/highbay/libmobile/
   events/                   feature "system-events": visibility, network and Doze callbacks
   image/                    feature "image-codec": ImageDecoder and Bitmap.compress
   media/                    feature "media-request": the system chooser or Photo Picker, and a provider for camera output
+  all_files_access/         feature "all-files-access": All files access and its settings page
+  media_scan/               feature "media-scan": MediaScannerConnection scans
 src/
   codegen.rs                plugin registry and rendering for GeneratedPlugins.kt and libmobile.gradle
   gradle.rs                 generates the Gradle project from the app's build.rs
@@ -66,6 +68,8 @@ examples/
 | `clipboard`   | `clipboard/ClipboardPlugin` | `android::clipboard::read_text`, `has_text` and `write_text`; no permission |
 | `image-codec` | `image/ImageCodecPlugin`   | `android::image_codec::probe_image`, `decode_image` and `encode_image` through Android's own codecs; no permission or manifest entry |
 | `media-request` | `media/MediaRequestPlugin` | `android::media::request_media` (the system chooser with optional camera entries, or the Photo Picker); `MobileEvent::Media`; `<queries>` for `IMAGE_CAPTURE` and `VIDEO_CAPTURE` and a private `<provider>` (`MediaFileProvider`, authority `<applicationId>.libmobile.media`); no permission of its own |
+| `all-files-access` | `all_files_access/AllFilesAccessPlugin` | `android::all_files_access::state`, `open_settings` and `external_storage_dir`; the permission only with `Project::all_files_access` |
+| `media-scan`  | `media_scan/MediaScanPlugin` | `android::media_scan::scan_paths` through `MediaScannerConnection`; no permission |
 | `tokio`       | none                       | `system_events::subscribe_tokio` (turns on `system-events`) |
 | `icons`       | none                       | `gradle::Icon` and `Project::icon`: the launcher icon from PNGs (build-dependency only; adds `image`) |
 
@@ -425,6 +429,51 @@ if let Ok(copied) = clipboard::write_text(&app, &question) {
 }
 ```
 
+### All files access and media scans
+
+Feature `all-files-access`, for an app that works on the phone's shared
+storage through POSIX paths, as a file manager or gallery does. All files
+access (`MANAGE_EXTERNAL_STORAGE`, Android 11 and later) is not a runtime
+permission: the build script declares it with `Project::all_files_access()`
+(the feature alone does not), and the user turns it on in a settings page.
+`android::all_files_access::state()` answers `Granted` or `Missing`, or
+`Err(NotDeclared)` when the manifest lacks the permission and
+`Err(Unsupported)` below API 30. `open_settings()` opens the app's own page
+(`AccessPage::App`), or the list of apps where the vendor has no per-app
+page (`List`); the app must be visible. Android reports nothing back, so
+read `state()` again on `MobileEvent::Resume`. `external_storage_dir()` is
+the primary shared volume (`/storage/emulated/0`), so the app need not
+write `/sdcard` by hand. Google Play allows the permission only for apps
+whose core purpose needs it; sideloaded apps are not bound by that.
+
+Feature `media-scan`, no permission: `android::media_scan::scan_paths(&[path])`
+asks MediaStore to scan absolute paths (at most 1 024 per call), so new,
+changed and deleted files show up in other apps (Google Photos, Files)
+without waiting for the next full scan. It returns once the scan is
+queued. Any thread, both features.
+
+```rust
+use libmobile::android::{all_files_access, media_scan};
+use libmobile::all_files_access::AllFilesAccess;
+
+// In MobileEvent::Resume, and on the user's "Allow" tap:
+match all_files_access::state() {
+    Ok(AllFilesAccess::Granted) => browse(all_files_access::external_storage_dir()?),
+    Ok(_) => { all_files_access::open_settings()?; }
+    Err(err) => log::warn!("all files access: {err}"),
+}
+
+// After deleting a photo through POSIX:
+media_scan::scan_paths(&[photo.as_path()])?;
+```
+
+```rust
+// build.rs
+libmobile::gradle::Project::new("com.example.files")
+    .all_files_access()
+    .generate()?;
+```
+
 ### Text input
 
 `android::set_text_input(&app, Some(value))` focuses an invisible field
@@ -690,6 +739,12 @@ URL with Go, the number pad, email with Send, a password, Search without
 autocorrect, one line with Enter, many lines, many lines with Send) and
 logs its name, each `TextChanged` (length and newlines, never the text),
 `TextAction` and `TextInputDismissed`; `--es cmd keyboard-close` hides it.
+`--es cmd files-access` logs `all_files_access::state()` and
+`external_storage_dir()` (also logged on each resume), `files-access-open`
+opens the All files access page and logs which, and
+`--es cmd media-scan --es path <path>` scans one path. Built with
+`LIBMOBILE_WGPU_NO_ALL_FILES=1`, the manifest leaves the permission out and
+`files-access` logs `NotDeclared`.
 
 ## Development
 
@@ -740,5 +795,5 @@ dual licensed as above, without any additional terms or conditions.
 | [Reading the clipboard's text](docs/design/20261028_03_CLIPBOARD_PLAN.md) | 2026-10-28 | In implementation | A `clipboard` feature: `android::clipboard::read_text` (the first item's text, `NotFocused` when Android 10's focus rule would hide it) and `has_text` (no Android 12 toast), read only. Being built on the owner's approval. |
 | [Viewing and sharing the app's files, receiving shares, and decoding images through Android](docs/design/20261028_04_SHARE_AND_VIEW_PLAN.md) | 2026-10-28 | In implementation | Three features, no permissions and no Jetpack: `share-out` (a read-only provider of libmobile's own for `cache_dir()/libmobile-share/`, `view_file` and `share_file` in the system chooser, `prune`), `share-target` (the app as an `ACTION_SEND`/`SEND_MULTIPLE` target for `image/*` and `text/plain`, a translucent receiver copying the streams under a cap while it holds the grant, `MobileEvent::Shared`) and `image-codec` (`decode_image` through `ImageDecoder` with EXIF rotation and HEIC, `encode_image` through `Bitmap.compress`, `probe_image`). Approved; `image-codec` built on its own first (0.3.3), the two sharing features wait for the owner. |
 | [Writing text to the clipboard](docs/design/20261029_01_CLIPBOARD_WRITE_PLAN.md) | 2026-10-29 | In implementation | The `clipboard` feature gains `android::clipboard::write_text` (`setPrimaryClip` of a plain-text clip labelled with the app's name; any thread, no permission), returning `Copied { system_notice }` so the app shows its own "Copied" only below Android 13; the same feature, since the write adds no permission or manifest entry. Requested for RoundTwo's Copy buttons. Released in 0.3.5 and checked over adb on the S23; pasting into another app is still to be seen on the phone. |
-| [All files access, the shared storage root, and telling MediaStore about changed files](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) | 2026-11-19 | In implementation | Two features: `all-files-access` (`android::all_files_access::state`, `open_settings` to the app's own page with the list as a fallback, `external_storage_dir`) and `media-scan` (`android::media_scan::scan_paths` through `MediaScannerConnection`), with `Project::all_files_access()` declaring `MANAGE_EXTERNAL_STORAGE`; re-read on resume, `Unsupported` below API 30; additive (0.5.3). Requested by ShotToss in place of its own JNI; approved and being built. |
+| [All files access, the shared storage root, and telling MediaStore about changed files](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md) | 2026-11-19 | In implementation | Two features: `all-files-access` (`android::all_files_access::state`, `open_settings` to the app's own page with the list as a fallback, `external_storage_dir`) and `media-scan` (`android::media_scan::scan_paths` through `MediaScannerConnection`), with `Project::all_files_access()` declaring `MANAGE_EXTERNAL_STORAGE`; re-read on resume, `Unsupported` below API 30; additive (0.5.3). Requested by ShotToss in place of its own JNI; released in 0.5.3, its S23 checks open. |
 | [Free space, the cache quota, and disk pressure reported when it changes](docs/design/20261119_02_DISK_SPACE_PLAN.md) | 2026-11-19 | Draft | Low-level only, by its amendment of the same day: a `disk-space` feature with `statvfs_space` on any host and `android::disk_space::space` adding `getAllocatableBytes` and `getCacheQuotaBytes` (no storage-low broadcast exists for API 30+), and `watch(path, interval)`, a Kotlin `Handler` reading statvfs on resume and every interval only while resumed, never per tick, posting each reading as `MobileEvent::DiskSpace` through a `mailbox::Latest` slot; grading, thresholds and the default interval are libmorph's; additive patch. Requested by ShotToss; drafted for the owner's review. |

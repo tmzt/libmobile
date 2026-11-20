@@ -353,3 +353,18 @@ the wider eight-row repair. The standard short-gap repair remains the default.
 
 Fixed the `camera-qr` feature build by restoring its contrast threshold
 constant. The QR API and runtime behavior are unchanged.
+
+## 0.5.3 — 2026-11-19 (tag `v0.5.3`)
+
+All files access and media scans
+(`docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md`). Additive.
+
+- Feature `all-files-access`: `all_files_access::{AllFilesAccess,
+  AccessPage, AllFilesAccessError}` (`#[non_exhaustive]`) and
+  `android::all_files_access::{state, open_settings, external_storage_dir}`.
+- Feature `media-scan`: `media_scan::{MediaScanError, MAX_SCAN_PATHS}` and
+  `android::media_scan::scan_paths`.
+- `gradle::Project::all_files_access()`: declares `MANAGE_EXTERNAL_STORAGE`
+  once, with `tools:ignore="ScopedStorage"` (and `xmlns:tools` on
+  `<manifest>` only then).
+- `codegen::MANAGE_EXTERNAL_STORAGE`, and two new `codegen::PLUGINS` entries.
