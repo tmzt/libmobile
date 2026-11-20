@@ -146,6 +146,8 @@ pub struct Project {
     /// The declared foreground service types, if any.
     service_types: Option<Vec<ServiceType>>,
     service_keeps_running: bool,
+    /// The app's own plugins, in registration (dispatch) order.
+    plugins: Vec<AppPlugin>,
     #[cfg(feature = "icons")]
     icon: Option<Icon>,
 }
@@ -164,6 +166,7 @@ impl Project {
             url_schemes: Vec::new(),
             service_types: None,
             service_keeps_running: false,
+            plugins: Vec::new(),
             #[cfg(feature = "icons")]
             icon: None,
         }
@@ -306,6 +309,21 @@ impl Project {
         self
     }
 
+    /// Register one of the app's own `MobileActivityPlugin` objects. It is
+    /// dispatched every lifecycle hook after libmobile's plugins, in the
+    /// order of these calls; its sources and contributions go into the
+    /// generated project (see [`AppPlugin`]). Panics if a plugin with the
+    /// same class is already registered.
+    pub fn plugin(mut self, plugin: AppPlugin) -> Self {
+        assert!(
+            !self.plugins.iter().any(|p| p.class == plugin.class),
+            "libmobile: app plugin {} is registered twice",
+            plugin.class
+        );
+        self.plugins.push(plugin);
+        self
+    }
+
     /// A Gradle script (relative to the crate root, or absolute) the app
     /// module applies after everything generated: signing, extra
     /// dependencies, resources.
@@ -393,6 +411,13 @@ impl Project {
         };
         #[cfg(not(feature = "icons"))]
         let icon_files: Vec<(String, Vec<u8>)> = Vec::new();
+        // And every app plugin's sources.
+        for plugin in &self.plugins {
+            for root in &plugin.sources {
+                println!("cargo:rerun-if-changed={}", root.display());
+            }
+            plugin.check_sources()?;
+        }
         let profile_dir = profile_dir(&PathBuf::from(env_var("OUT_DIR")?))?;
         let native_lib = profile_dir.join(format!("lib{}.so", self.spec.lib_name));
 
@@ -406,13 +431,14 @@ impl Project {
                 .join("gradle")
                 .join(env::var("CARGO_PKG_NAME").unwrap_or_else(|_| "app".into())),
         };
-        for (name, contents) in self.spec.render(&libmobile_gradle, &native_lib, abi) {
-            let contents = if name == MANIFEST {
-                self.finish_manifest(&contents, service.as_ref())
-            } else {
-                contents
-            };
+        for (name, contents) in
+            self.files(&dir, &libmobile_gradle, &native_lib, abi, service.as_ref())
+        {
             write_if_changed(&dir.join(name), &contents)?;
+        }
+        if self.plugins.is_empty() {
+            // A list an earlier build wrote, now unused.
+            remove_if_present(&dir.join(APP_PLUGINS_KT))?;
         }
         for (name, contents) in &icon_files {
             write_if_changed(&dir.join(name), contents)?;
@@ -436,8 +462,100 @@ impl Project {
 }
 
 const MANIFEST: &str = "app/src/main/AndroidManifest.xml";
+const APP_BUILD: &str = "app/build.gradle.kts";
+
+/// The source root of the app's `GeneratedAppPlugins.kt`, relative to the
+/// project.
+const APP_PLUGINS_ROOT: &str = "app/libmobile-app-plugins";
+
+/// The app's `GeneratedAppPlugins.kt`, relative to the project.
+const APP_PLUGINS_KT: &str =
+    "app/libmobile-app-plugins/dev/highbay/libmobile/GeneratedAppPlugins.kt";
 
 impl Project {
+    /// Every text file of the project at `dir`, as `(path relative to it,
+    /// contents)`: the rendered project with the builder's additions, and
+    /// the app's plugin list when it has plugins.
+    fn files(
+        &self,
+        dir: &Path,
+        libmobile_gradle: &Path,
+        native_lib: &Path,
+        abi: &str,
+        service: Option<&codegen::ServiceManifest>,
+    ) -> Vec<(&'static str, String)> {
+        let mut spec = self.spec.clone();
+        for permission in self.plugins.iter().flat_map(|p| &p.permissions) {
+            if !spec.permissions.iter().any(|p| p == permission) {
+                spec.permissions.push(permission.clone());
+            }
+        }
+        let mut files: Vec<(&'static str, String)> = spec
+            .render(libmobile_gradle, native_lib, abi)
+            .into_iter()
+            .map(|(name, contents)| match name {
+                MANIFEST => (name, self.finish_manifest(&contents, service)),
+                APP_BUILD => (name, self.with_app_plugins(&contents, dir)),
+                _ => (name, contents),
+            })
+            .collect();
+        if !self.plugins.is_empty() {
+            let classes: Vec<&str> = self.plugins.iter().map(|p| p.class.as_str()).collect();
+            files.push((APP_PLUGINS_KT, codegen::generated_app_plugins_kt(&classes)));
+        }
+        files
+    }
+
+    /// The app module's build script with the app plugins' block before
+    /// `libmobile.gradle` is applied: the list's root (as
+    /// `codegen::APP_PLUGINS_ROOT_PROPERTY`), the source roots and the AARs.
+    /// Unchanged without plugins.
+    fn with_app_plugins(&self, app: &str, dir: &Path) -> String {
+        if self.plugins.is_empty() {
+            return app.to_string();
+        }
+        let kotlin = |path: &Path| kotlin_path(path);
+        let mut block = String::from(
+            "// The app's own plugins (Project::plugin): their sources, their AARs, and the\n\
+             // list MobileNativeActivity dispatches to after libmobile's.\n",
+        );
+        block.push_str(&format!(
+            "extra[\"{}\"] = {}\n",
+            codegen::APP_PLUGINS_ROOT_PROPERTY,
+            kotlin(&dir.join(APP_PLUGINS_ROOT))
+        ));
+        let mut roots: Vec<&PathBuf> = Vec::new();
+        for root in self.plugins.iter().flat_map(|p| &p.sources) {
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+        for root in roots {
+            for set in ["java", "kotlin"] {
+                block.push_str(&format!(
+                    "android.sourceSets[\"main\"].{set}.srcDir({})\n",
+                    kotlin(root)
+                ));
+            }
+        }
+        let deps = dedup(self.plugins.iter().flat_map(|p| &p.dependencies));
+        if !deps.is_empty() {
+            block.push_str("dependencies {\n");
+            for dep in deps {
+                block.push_str(&format!(
+                    "    add(\"implementation\", {})\n",
+                    kotlin(Path::new(dep))
+                ));
+            }
+            block.push_str("}\n");
+        }
+        block.push('\n');
+        const BEFORE: &str = "// libmobile's Kotlin sources, AARs and manifest entries";
+        match app.find(BEFORE) {
+            Some(at) => format!("{}{block}{}", &app[..at], &app[at..]),
+            None => format!("{app}\n{block}"),
+        }
+    }
     /// The rendered manifest with what the builder adds: the URL scheme
     /// filters, the service and the icon attributes.
     fn finish_manifest(
@@ -450,6 +568,14 @@ impl Project {
             Some(service) => with_service(&manifest, &service.application),
             None => manifest,
         };
+        let manifest = with_manifest_elements(
+            &manifest,
+            &dedup(self.plugins.iter().flat_map(|p| &p.manifest)),
+        );
+        let manifest = with_application_elements(
+            &manifest,
+            &dedup(self.plugins.iter().flat_map(|p| &p.application)),
+        );
         #[cfg(feature = "icons")]
         let manifest = match &self.icon {
             Some(_) => with_icon(&manifest),
@@ -497,6 +623,266 @@ fn with_service(manifest: &str, service: &str) -> String {
         &format!("{service}    </application>"),
         1,
     )
+}
+
+/// The rendered manifest with app plugins' elements directly inside
+/// `<manifest>`, before `<application>`.
+fn with_manifest_elements(manifest: &str, elements: &[&String]) -> String {
+    if elements.is_empty() {
+        return manifest.to_string();
+    }
+    let xml: String = elements
+        .iter()
+        .map(|e| format!("    {}\n", e.trim()))
+        .collect();
+    manifest.replacen(
+        "\n    <application\n",
+        &format!("\n{xml}\n    <application\n"),
+        1,
+    )
+}
+
+/// The rendered manifest with app plugins' elements at the end of
+/// `<application>`.
+fn with_application_elements(manifest: &str, elements: &[&String]) -> String {
+    if elements.is_empty() {
+        return manifest.to_string();
+    }
+    let xml: String = elements
+        .iter()
+        .map(|e| format!("        {}\n", e.trim()))
+        .collect();
+    manifest.replacen("    </application>", &format!("{xml}    </application>"), 1)
+}
+
+/// The items, first occurrence kept, in order.
+fn dedup<'a>(items: impl Iterator<Item = &'a String>) -> Vec<&'a String> {
+    let mut out: Vec<&String> = Vec::new();
+    for item in items {
+        if !out.contains(&item) {
+            out.push(item);
+        }
+    }
+    out
+}
+
+/// A Kotlin string literal of a path (or any text): `/` separators, `$`
+/// and `"` escaped.
+fn kotlin_path(path: &Path) -> String {
+    let escaped = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace('"', "\\\"")
+        .replace('$', "\\$");
+    format!("\"{escaped}\"")
+}
+
+/// One of the app's own `MobileActivityPlugin` objects, for
+/// [`Project::plugin`].
+///
+/// ```no_run
+/// use libmobile::gradle::{AppPlugin, Project};
+///
+/// Project::new("dev.tmzt.shottoss")
+///     .plugin(
+///         AppPlugin::new("dev.tmzt.shottoss.media.MediaStorePlugin")
+///             .sources("android/java")
+///             .permission("android.permission.READ_MEDIA_IMAGES"),
+///     )
+///     .generate()
+///     .expect("gradle project");
+/// ```
+///
+/// * **The class** is a Kotlin `object` implementing
+///   `dev.highbay.libmobile.MobileActivityPlugin`, fully qualified. It may
+///   not be in `dev.highbay.libmobile` or a package libmobile ships Kotlin in
+///   (`codegen::check_app_plugin_class`); the app's own package is
+///   recommended.
+/// * **Sources** are source roots (package-tree roots), relative to the
+///   crate root or absolute, compiled in place. [`Project::generate`] fails,
+///   naming the path, when a root is missing or none of the plugin's roots
+///   has `<package as dirs>/<Class>.kt` declaring `object <Class>`. A plugin
+///   with no sources comes from a [`dependency`](Self::dependency).
+/// * **Contributions** are merged into the generated manifest and app
+///   module, each once.
+/// * **Natives:** the object's `external fun`s are exported by the app's
+///   own cdylib, which is registered before the first hook.
+/// * **Kotlin it may use:** `MobileActivityPlugin`, `MobileNativeActivity`,
+///   `GeneratedPlugins.activePlugins` and `GeneratedAppPlugins.plugins`;
+///   the rest of libmobile's Kotlin is internal. Activity and permission
+///   request codes `0x4000` to `0x7FFF` are libmobile's.
+///
+/// The builder methods panic, with a message starting `libmobile:`, on a
+/// value that cannot be right.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AppPlugin {
+    class: String,
+    sources: Vec<PathBuf>,
+    permissions: Vec<String>,
+    manifest: Vec<String>,
+    application: Vec<String>,
+    dependencies: Vec<String>,
+}
+
+impl AppPlugin {
+    /// The plugin object, fully qualified
+    /// (`dev.tmzt.shottoss.media.MediaStorePlugin`). Panics on a name
+    /// `codegen::check_app_plugin_class` rejects.
+    pub fn new(class: &str) -> Self {
+        if let Err(err) = codegen::check_app_plugin_class(class) {
+            panic!("libmobile: {err}");
+        }
+        AppPlugin {
+            class: class.to_string(),
+            sources: Vec::new(),
+            permissions: Vec::new(),
+            manifest: Vec::new(),
+            application: Vec::new(),
+            dependencies: Vec::new(),
+        }
+    }
+
+    /// The class, as given.
+    pub fn class(&self) -> &str {
+        &self.class
+    }
+
+    /// A Kotlin/Java source root holding the plugin (and anything else
+    /// compiled with it), relative to the crate root or absolute, as
+    /// [`Project::extra_script`] resolves its path. May be called more than
+    /// once.
+    pub fn sources(mut self, dir: impl AsRef<Path>) -> Self {
+        let dir = crate_path(dir.as_ref());
+        if !self.sources.contains(&dir) {
+            self.sources.push(dir);
+        }
+        self
+    }
+
+    /// A `uses-permission` the plugin needs. Panics unless the name is
+    /// letters, digits, `_` and `.`.
+    pub fn permission(mut self, name: &str) -> Self {
+        assert!(
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.'),
+            "libmobile: app plugin {}: invalid permission {name:?}",
+            self.class
+        );
+        push_once(&mut self.permissions, name);
+        self
+    }
+
+    /// An element directly inside `<manifest>` (`<queries>`,
+    /// `<uses-feature>`). Panics unless it starts with `<` and ends with `>`.
+    pub fn manifest(mut self, xml: &str) -> Self {
+        check_element(&self.class, xml);
+        push_once(&mut self.manifest, xml.trim());
+        self
+    }
+
+    /// An element directly inside `<application>` (`<provider>`,
+    /// `<receiver>`, `<meta-data>`). Panics unless it starts with `<` and
+    /// ends with `>`.
+    pub fn application(mut self, xml: &str) -> Self {
+        check_element(&self.class, xml);
+        push_once(&mut self.application, xml.trim());
+        self
+    }
+
+    /// An `implementation` dependency, `group:artifact:version` (or with a
+    /// classifier, four parts). Panics on anything else.
+    pub fn dependency(mut self, coordinate: &str) -> Self {
+        let parts: Vec<&str> = coordinate.split(':').collect();
+        assert!(
+            (3..=4).contains(&parts.len())
+                && parts.iter().all(|p| {
+                    !p.is_empty() && !p.chars().any(|c| c.is_whitespace() || "'\"\\$".contains(c))
+                }),
+            "libmobile: app plugin {}: invalid dependency {coordinate:?} \
+             (group:artifact:version)",
+            self.class
+        );
+        push_once(&mut self.dependencies, coordinate);
+        self
+    }
+
+    /// The package as directories and the simple name.
+    fn path_and_name(&self) -> (PathBuf, &str) {
+        let (package, name) = self.class.rsplit_once('.').unwrap_or(("", &self.class));
+        (package.split('.').collect(), name)
+    }
+
+    /// The filesystem checks [`Project::generate`] makes before writing.
+    fn check_sources(&self) -> io::Result<()> {
+        for root in &self.sources {
+            if !root.is_dir() {
+                return Err(io::Error::other(format!(
+                    "libmobile: app plugin {}: source root {} is not a directory",
+                    self.class,
+                    root.display()
+                )));
+            }
+        }
+        if self.sources.is_empty() {
+            return Ok(());
+        }
+        let (package, name) = self.path_and_name();
+        let file = format!("{name}.kt");
+        let Some(path) = self
+            .sources
+            .iter()
+            .map(|root| root.join(&package).join(&file))
+            .find(|path| path.is_file())
+        else {
+            return Err(io::Error::other(format!(
+                "libmobile: app plugin {}: {} is in none of its source roots ({})",
+                self.class,
+                package.join(&file).display(),
+                self.sources
+                    .iter()
+                    .map(|r| r.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        };
+        let text = fs::read_to_string(&path)?;
+        if !declares_object(&text, name) {
+            return Err(io::Error::other(format!(
+                "libmobile: app plugin {}: {} declares no `object {name}` (an app plugin \
+                 is a Kotlin object implementing MobileActivityPlugin)",
+                self.class,
+                path.display()
+            )));
+        }
+        Ok(())
+    }
+}
+
+fn push_once(list: &mut Vec<String>, item: &str) {
+    if !list.iter().any(|i| i == item) {
+        list.push(item.to_string());
+    }
+}
+
+fn check_element(class: &str, xml: &str) {
+    let xml = xml.trim();
+    assert!(
+        xml.len() >= 2 && xml.starts_with('<') && xml.ends_with('>'),
+        "libmobile: app plugin {class}: {xml:?} is not an XML element"
+    );
+}
+
+/// Whether Kotlin source `text` has `object <name>` as whole words.
+fn declares_object(text: &str, name: &str) -> bool {
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let needle = format!("object {name}");
+    text.match_indices(&needle).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + needle.len()..].chars().next();
+        !before.is_some_and(ident) && !after.is_some_and(ident)
+    })
 }
 
 const IGNORE_BATTERY_OPTIMIZATIONS: &str =
@@ -796,6 +1182,285 @@ mod icons {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh directory under the system temp dir, removed on drop.
+    struct Scratch(PathBuf);
+    impl Scratch {
+        fn new(name: &str) -> Self {
+            let dir =
+                env::temp_dir().join(format!("libmobile-gradle-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+        fn write(&self, rel: &str, text: &str) {
+            let path = self.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        }
+    }
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn project_files(project: &Project) -> Vec<(&'static str, String)> {
+        project.files(
+            Path::new("/p"),
+            Path::new("/l/libmobile.gradle"),
+            Path::new("/l/libapp.so"),
+            "arm64-v8a",
+            None,
+        )
+    }
+
+    fn file<'a>(files: &'a [(&'static str, String)], name: &str) -> &'a str {
+        &files.iter().find(|(n, _)| *n == name).unwrap().1
+    }
+
+    fn media_store_plugin() -> AppPlugin {
+        AppPlugin::new("dev.tmzt.shottoss.media.MediaStorePlugin")
+            .sources("/app/android/java")
+            .permission("android.permission.READ_MEDIA_IMAGES")
+            .manifest(
+                "<queries><package android:name=\"com.google.android.apps.photos\" /></queries>",
+            )
+            .application("<meta-data android:name=\"m\" android:value=\"v\" />")
+            .dependency("androidx.exifinterface:exifinterface:1.3.7")
+    }
+
+    #[test]
+    fn app_plugin_is_staged_into_the_project() {
+        let project = Project::new("dev.tmzt.shottoss")
+            .permission("android.permission.READ_MEDIA_IMAGES")
+            .plugin(media_store_plugin())
+            .plugin(
+                AppPlugin::new("dev.tmzt.shottoss.Second")
+                    .sources("/app/android/java")
+                    .sources("/app/more")
+                    .permission("android.permission.VIBRATE")
+                    .dependency("androidx.exifinterface:exifinterface:1.3.7"),
+            );
+        let files = project_files(&project);
+
+        // The list: libmobile's plugins are GeneratedPlugins'; these follow.
+        let list = file(&files, APP_PLUGINS_KT);
+        assert_eq!(
+            list,
+            codegen::generated_app_plugins_kt(&[
+                "dev.tmzt.shottoss.media.MediaStorePlugin",
+                "dev.tmzt.shottoss.Second"
+            ])
+        );
+
+        // The app module: the list's root, each source root once, each AAR
+        // once, all before libmobile.gradle is applied.
+        let app = file(&files, APP_BUILD);
+        let block =
+            app.find("extra[\"LIBMOBILE_APP_PLUGINS_ROOT\"] = \"/p/app/libmobile-app-plugins\"\n");
+        let apply = app.find("apply(from = \"/l/libmobile.gradle\")");
+        assert!(block.is_some() && block < apply, "{app}");
+        for set in ["java", "kotlin"] {
+            assert_eq!(
+                app.matches(&format!(
+                    "android.sourceSets[\"main\"].{set}.srcDir(\"/app/android/java\")\n"
+                ))
+                .count(),
+                1
+            );
+            assert!(app.contains(&format!(
+                "android.sourceSets[\"main\"].{set}.srcDir(\"/app/more\")\n"
+            )));
+        }
+        assert_eq!(
+            app.matches(
+                "    add(\"implementation\", \"androidx.exifinterface:exifinterface:1.3.7\")\n"
+            )
+            .count(),
+            1
+        );
+
+        // The manifest: each permission once, the <queries> before
+        // <application>, the meta-data inside it.
+        let manifest = file(&files, MANIFEST);
+        assert_eq!(
+            manifest
+                .matches("android.permission.READ_MEDIA_IMAGES")
+                .count(),
+            1
+        );
+        assert!(
+            manifest.contains("<uses-permission android:name=\"android.permission.VIBRATE\" />")
+        );
+        let queries = manifest
+            .find("<queries><package android:name=\"com.google.android.apps.photos\" /></queries>")
+            .unwrap();
+        let application = manifest.find("<application").unwrap();
+        let meta = manifest.find("<meta-data android:name=\"m\"").unwrap();
+        let activity_end = manifest.find("</activity>").unwrap();
+        let end = manifest.find("</application>").unwrap();
+        assert!(queries < application);
+        assert!(activity_end < meta && meta < end);
+    }
+
+    #[test]
+    fn project_without_app_plugins_is_unchanged() {
+        let project = Project::new("dev.example.app").url_scheme("handlr");
+        let files = project_files(&project);
+        let rendered = project.spec.render(
+            Path::new("/l/libmobile.gradle"),
+            Path::new("/l/libapp.so"),
+            "arm64-v8a",
+        );
+        assert_eq!(files.len(), rendered.len());
+        for (name, contents) in rendered {
+            let expected = if name == MANIFEST {
+                project.finish_manifest(&contents, None)
+            } else {
+                contents
+            };
+            assert_eq!(file(&files, name), expected, "{name}");
+        }
+        assert!(!file(&files, APP_BUILD).contains("LIBMOBILE_APP_PLUGINS_ROOT"));
+    }
+
+    #[test]
+    fn plugin_without_sources_or_contributions_adds_only_the_list() {
+        let project =
+            Project::new("dev.example.app").plugin(AppPlugin::new("com.vendor.aar.VendorPlugin"));
+        let files = project_files(&project);
+        let app = file(&files, APP_BUILD);
+        assert!(app.contains("extra[\"LIBMOBILE_APP_PLUGINS_ROOT\"]"));
+        assert!(!app.contains("srcDir(\"/"));
+        assert!(!app.contains("add(\"implementation\""));
+        assert!(file(&files, APP_PLUGINS_KT).contains("        com.vendor.aar.VendorPlugin,\n"));
+        assert_eq!(
+            file(&files, MANIFEST),
+            project_files(&Project::new("dev.example.app"))
+                .into_iter()
+                .find(|(n, _)| *n == MANIFEST)
+                .unwrap()
+                .1
+        );
+        assert!(
+            AppPlugin::new("com.vendor.aar.VendorPlugin")
+                .check_sources()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn app_plugin_sources_are_checked() {
+        let scratch = Scratch::new("app-plugin-sources");
+        let root = scratch.0.join("android/java");
+        let plugin = || AppPlugin::new("dev.example.app.ResumePlugin").sources(&root);
+
+        let err = plugin().check_sources().unwrap_err().to_string();
+        assert!(
+            err.contains("is not a directory") && err.contains("android/java"),
+            "{err}"
+        );
+
+        fs::create_dir_all(&root).unwrap();
+        let err = plugin().check_sources().unwrap_err().to_string();
+        assert!(
+            err.contains("dev/example/app/ResumePlugin.kt is in none"),
+            "{err}"
+        );
+
+        scratch.write(
+            "android/java/dev/example/app/ResumePlugin.kt",
+            "package dev.example.app\nclass ResumePlugin\nobject ResumePluginX\n",
+        );
+        let err = plugin().check_sources().unwrap_err().to_string();
+        assert!(err.contains("declares no `object ResumePlugin`"), "{err}");
+
+        scratch.write(
+            "android/java/dev/example/app/ResumePlugin.kt",
+            "package dev.example.app\n\nobject ResumePlugin : MobileActivityPlugin {}\n",
+        );
+        plugin().check_sources().unwrap();
+
+        // Found in the second of two roots.
+        let other = scratch.0.join("other");
+        fs::create_dir_all(&other).unwrap();
+        AppPlugin::new("dev.example.app.ResumePlugin")
+            .sources(&other)
+            .sources(&root)
+            .check_sources()
+            .unwrap();
+    }
+
+    #[test]
+    fn declares_object_matches_whole_words() {
+        assert!(declares_object("object P : X", "P"));
+        assert!(declares_object("internal object P{}", "P"));
+        assert!(!declares_object("object PX", "P"));
+        assert!(!declares_object("companion objectP", "P"));
+        assert!(!declares_object("class P", "P"));
+    }
+
+    #[test]
+    fn app_plugin_sources_are_relative_to_the_crate() {
+        let plugin = AppPlugin::new("a.B")
+            .sources("android/java")
+            .sources("android/java");
+        assert_eq!(plugin.sources.len(), 1);
+        assert!(plugin.sources[0].ends_with("android/java"));
+        assert_eq!(plugin.class(), "a.B");
+    }
+
+    #[test]
+    #[should_panic(expected = "libmobile: app plugin class \"Plugin\" must be fully qualified")]
+    fn app_plugin_needs_a_qualified_class() {
+        let _ = AppPlugin::new("Plugin");
+    }
+
+    #[test]
+    #[should_panic(expected = "a package libmobile ships its own")]
+    fn app_plugin_stays_out_of_libmobiles_packages() {
+        let _ = AppPlugin::new("dev.highbay.libmobile.bridge.Mine");
+    }
+
+    #[test]
+    #[should_panic(expected = "registered twice")]
+    fn app_plugin_is_registered_once() {
+        let _ = Project::new("a.b")
+            .plugin(AppPlugin::new("a.b.P"))
+            .plugin(AppPlugin::new("a.b.P").sources("x"));
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid permission")]
+    fn app_plugin_permission_is_checked() {
+        let _ = AppPlugin::new("a.b.P").permission("android.permission.\"X");
+    }
+
+    #[test]
+    #[should_panic(expected = "is not an XML element")]
+    fn app_plugin_manifest_element_is_checked() {
+        let _ = AppPlugin::new("a.b.P").manifest("queries");
+    }
+
+    #[test]
+    #[should_panic(expected = "is not an XML element")]
+    fn app_plugin_application_element_is_checked() {
+        let _ = AppPlugin::new("a.b.P").application(" <");
+    }
+
+    #[test]
+    fn app_plugin_dependencies_are_coordinates() {
+        let ok = AppPlugin::new("a.b.P")
+            .dependency("g:a:1")
+            .dependency("g:a:1:classifier")
+            .dependency("g:a:1");
+        assert_eq!(ok.dependencies, ["g:a:1", "g:a:1:classifier"]);
+        for bad in ["g:a", "g::1", "g:a:1 ", "g:a:$v", "g:a:1:2:3", "g:a:\"1\""] {
+            let result = std::panic::catch_unwind(|| AppPlugin::new("a.b.P").dependency(bad));
+            assert!(result.is_err(), "{bad:?}");
+        }
+    }
 
     #[test]
     fn url_schemes_are_validated() {
