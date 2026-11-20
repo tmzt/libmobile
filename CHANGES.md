@@ -1398,3 +1398,31 @@ to a `GeneratedAppPlugins` object in the generated Gradle project and
 dispatched after libmobile's own. The history was searched for an earlier
 app-plugin design that was dropped; there is none (the plan's section 2).
 The owner's request is the instruction to build it; additive, for 0.5.5.
+
+## 2026-11-20 01:55 EST — App plugins built; 0.5.5
+
+Plan: [Plugins contributed by the app itself](docs/design/20261120_01_APP_PLUGINS_PLAN.md),
+`In implementation` since `ae80548`. Steps 1 to 4 are built and
+released as 0.5.5 (tag `v0.5.5`): `ae80548` step 1 (codegen, the
+default list, the dispatch), `60ddcee` step 2 (`gradle::AppPlugin`,
+`Project::plugin`), `75f3b9d` step 3 (the wgpu example's
+`ResumeLogPlugin`), `fb5aaab` step 4 (README, 0.5.5). No departures
+from the plan.
+
+Checked: `cargo fmt --all -- --check`; `cargo clippy --workspace
+--all-targets` and `-p libmobile --all-targets --all-features` on the
+host, and for `aarch64-linux-android` the workspace with no features and
+`-p libmobile --all-features`: no new warnings (the one warning,
+`normalized` never used in `src/camera/qr/scan.rs`, is the
+pre-existing one under `--all-features` on Android). `cargo test
+--workspace` (190 lib tests) and `cargo test -p libmobile
+--all-features` (281) pass. `examples/build.sh wgpu` builds with the
+app plugin: `dexdump` shows `ResumeLogPlugin` and
+`GeneratedAppPlugins` listing it, and `llvm-nm -D` the native export
+(evidence: `out/app-plugins/LOG.md`). `examples/build.sh bitmap`, with
+no app plugin, builds unchanged against the default list.
+
+libmorph and libmorph-build build and pass their checks against 0.5.5
+through a `--config` patch to this checkout; their pin waits for 0.5.5
+to be on GitHub (step 5). Open: the `ResumeLogPlugin` log lines on a
+device.
