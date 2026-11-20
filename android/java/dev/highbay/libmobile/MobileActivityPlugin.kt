@@ -10,10 +10,20 @@ import android.view.Window
  *
  * Every hook has an empty default, so a plugin overrides only what it needs.
  * Plugins are Kotlin `object`s listed in [GeneratedPlugins.activePlugins],
- * which `build.rs` writes from the active Cargo features — there is no runtime
- * discovery. Hooks run on the UI thread, in list order; a plugin that reports
- * to Rust does so through its own `external fun`, and the Rust side only
- * queues the report for the `android_main` loop.
+ * which `build.rs` writes from the active Cargo features, and, after them, the
+ * app's own in [GeneratedAppPlugins.plugins], which the app's build.rs writes
+ * (`libmobile::gradle::Project::plugin`) — there is no runtime discovery.
+ * Hooks run on the UI thread, in list order; a plugin that reports to Rust
+ * does so through its own `external fun`, and the Rust side only queues the
+ * report for the `android_main` loop. The app's cdylib is registered before
+ * the first `onCreate`, so an app plugin's natives resolve from then on.
+ *
+ * **The stable surface for an app's plugin** is this interface,
+ * [MobileNativeActivity], [GeneratedPlugins.activePlugins] and
+ * [GeneratedAppPlugins.plugins]. Everything else in this package (`NativeLib`,
+ * the `bridge` objects, the feature plugins) is libmobile's own and may change
+ * in any release. Activity and permission request codes `0x4000` to `0x7FFF`
+ * are libmobile's; an app's plugin uses codes outside that range.
  */
 interface MobileActivityPlugin {
     /** After `NativeActivity.onCreate` (the native thread is running) and after the native library is registered. */

@@ -7,7 +7,11 @@
 //!   be added whole, and a disabled feature's sources would compile against
 //!   AARs the app does not have. `OUT_DIR` is per feature set, so each set
 //!   keeps its own tree.
-//! * `libmobile.gradle` — appends that root to `android.sourceSets.main`, adds
+//! * `$OUT_DIR/app-plugins/dev/highbay/libmobile/GeneratedAppPlugins.kt` —
+//!   the default, empty list of the app's own plugins, in a source root of
+//!   its own so a generated project with app plugins can name another
+//!   (`codegen::APP_PLUGINS_ROOT_PROPERTY`).
+//! * `libmobile.gradle` — appends those roots to `android.sourceSets.main`, adds
 //!   the plugins' AARs, and splices their manifest contributions into the
 //!   merged manifest. Written to `OUT_DIR` and to the stable handoff
 //!   directory the app module applies it from: `$LIBMOBILE_GRADLE_DIR` if set,
@@ -65,6 +69,15 @@ fn main() {
     write(
         &package_dst.join("GeneratedPlugins.kt"),
         &codegen::generated_plugins_kt(&enabled, &active),
+    );
+    // The default, empty app plugin list, in its own source root beside the
+    // staged one: a generated project with app plugins replaces the root.
+    write(
+        &out_dir
+            .join(codegen::APP_PLUGINS_DIR)
+            .join(codegen::PACKAGE_DIR)
+            .join(format!("{}.kt", codegen::APP_PLUGINS_OBJECT)),
+        &codegen::generated_app_plugins_kt(&[]),
     );
     let script = codegen::gradle_script(&enabled, &java_root, &codegen::merge(&active));
     write(&out_dir.join("libmobile.gradle"), &script);

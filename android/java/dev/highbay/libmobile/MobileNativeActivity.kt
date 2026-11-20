@@ -14,10 +14,15 @@ import android.os.Bundle
  * aimed at a running instance is otherwise swallowed), window insets, IME
  * text, activity and permission results — each handled by a [MobileActivityPlugin].
  *
- * Use it directly as the manifest's activity, or subclass it to add plugins:
+ * By default it dispatches to libmobile's plugins ([GeneratedPlugins.activePlugins])
+ * and then to the app's own ([GeneratedAppPlugins.plugins], registered with
+ * `libmobile::gradle::Project::plugin` in the app's build.rs), in that order.
+ *
+ * Use it directly as the manifest's activity, or subclass it to build the
+ * list yourself:
  * ```
  * class MyActivity : MobileNativeActivity() {
- *     override val plugins = GeneratedPlugins.activePlugins + MyPlugin
+ *     override val plugins = GeneratedPlugins.activePlugins + GeneratedAppPlugins.plugins + MyPlugin
  * }
  * ```
  * Declare it `android:launchMode="singleTop"` so a later intent is redelivered
@@ -26,7 +31,14 @@ import android.os.Bundle
 open class MobileNativeActivity : NativeActivity() {
     /** The plugins this activity dispatches to, in order. */
     protected open val plugins: List<MobileActivityPlugin>
-        get() = GeneratedPlugins.activePlugins
+        get() = defaultPlugins
+
+    private companion object {
+        /** libmobile's plugins, then the app's: built once per process. */
+        val defaultPlugins: List<MobileActivityPlugin> by lazy {
+            GeneratedPlugins.activePlugins + GeneratedAppPlugins.plugins
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // `super` first: `NativeActivity.onCreate` builds the window and

@@ -1,7 +1,7 @@
 ---
 title: Plugins contributed by the app itself
 date: 2026-11-20
-status: Draft
+status: In implementation
 covers:
   - "`gradle::AppPlugin` and `gradle::Project::plugin`: an app's build.rs registers its own `MobileActivityPlugin` objects, with their Kotlin sources and optional contributions (permissions, manifest elements, `<application>` elements, AAR dependencies)"
   - "`GeneratedAppPlugins.kt`: the app's half of the plugin list, written by the app's build script into the generated Gradle project, dispatched after libmobile's own plugins"
@@ -307,3 +307,10 @@ dependencies {
    bump is a patch (Rule 5.5 does not apply). **Done when:** libmorph's
    workspace builds and tests against 0.5.5, and
    `libmorph_build::gradle_project(..).plugin(..)` compiles in a test.
+
+## Amendment — 2026-11-20 01:52 EST: implementation started; the document is now immutable
+
+The owner's request of 2026-11-20 ("add app plugin registration to
+libmobile") is the instruction to build this plan. Step 1 starts with this
+commit, the first implementing one. Implementation has started and the
+document is now immutable (Rule 1.5).
