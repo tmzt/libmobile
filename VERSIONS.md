@@ -368,3 +368,15 @@ All files access and media scans
   once, with `tools:ignore="ScopedStorage"` (and `xmlns:tools` on
   `<manifest>` only then).
 - `codegen::MANAGE_EXTERNAL_STORAGE`, and two new `codegen::PLUGINS` entries.
+
+## 0.5.4 — 2026-11-19 (tag `v0.5.4`)
+
+Free space, the cache quota and periodic readings
+(`docs/design/20261119_02_DISK_SPACE_PLAN.md`). Additive.
+
+- Feature `disk-space` (adds `libc` 0.2): `disk_space::{DiskSpace,
+  DiskSpaceError}` (`#[non_exhaustive]`) and `disk_space::statvfs_space`;
+  `android::disk_space::{space, watch, unwatch}`.
+- `MobileEvent::DiskSpace(DiskSpace)` under `disk-space` (`MobileEvent` is
+  `#[non_exhaustive]`).
+- A new `codegen::PLUGINS` entry.
