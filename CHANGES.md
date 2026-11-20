@@ -1386,3 +1386,15 @@ leaving Google Photos, and the `NotDeclared` build
 `adb shell df /data` and the `disk-watch` timing. libmorph has not been
 built against 0.5.3 or 0.5.4: the Mac's disk was below the 3 GB floor
 the coordinator set. Both plans stay `In implementation` until then.
+
+## 2026-11-20 01:46 EST — Plugins contributed by the app itself, planned
+
+Plan: [Plugins contributed by the app itself](docs/design/20261120_01_APP_PLUGINS_PLAN.md) (Draft).
+
+Planned new work on the owner's instruction of 2026-11-20 ("add app plugin
+registration to libmobile"): `gradle::AppPlugin` and `Project::plugin`, so
+an app's build.rs registers its own `MobileActivityPlugin` objects, written
+to a `GeneratedAppPlugins` object in the generated Gradle project and
+dispatched after libmobile's own. The history was searched for an earlier
+app-plugin design that was dropped; there is none (the plan's section 2).
+The owner's request is the instruction to build it; additive, for 0.5.5.
