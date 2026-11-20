@@ -1322,3 +1322,67 @@ Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) on the owner's ins
 Plan: [Free space, the cache quota, and disk pressure reported when it changes](docs/design/20261119_02_DISK_SPACE_PLAN.md) (Draft).
 
 Planned new work, requested by ShotToss (`dev.tmzt.shottoss`) after the owner said disk and memory pressure might be valuable as libmorph/libmobile plans: a `disk-space` feature with a graded `DiskPressure` delivered as `MobileEvent::DiskPressure` from a slow Kotlin timer while resumed. No code until the owner approves the plan.
+
+## 2026-11-19 19:42 EST — All files access, media scans and disk space built; 0.5.3 and 0.5.4
+
+Plans: [All files access, the shared storage root, and telling MediaStore about changed files](docs/design/20261119_01_ALL_FILES_ACCESS_PLAN.md)
+and [Free space, the cache quota, and disk pressure reported when it changes](docs/design/20261119_02_DISK_SPACE_PLAN.md),
+both approved by the owner on 2026-11-19 ("approve and build") and now
+`In implementation`. Released as 0.5.3 (tag `v0.5.3`) and 0.5.4 (tag
+`v0.5.4`).
+
+Small departures needed to make the plans work (Rule 1.7):
+
+- **Plan 20261119_01, step 1, the `tools:` attribute.** The manifest
+  writer (`codegen::GradleProject::render`) puts `tools:ignore="ScopedStorage"`
+  on the `MANAGE_EXTERNAL_STORAGE` element, and `xmlns:tools` on
+  `<manifest>`, whenever that permission is in the app's list, rather than
+  through a new field: `GradleProject` is an exhaustive public struct, and
+  a new field would not be additive. The constant is
+  `codegen::MANAGE_EXTERNAL_STORAGE`.
+- **Plan 20261119_01, step 1, lint.** `AllFilesAccessPlugin.state` repeats
+  the API 30 check inline, because lint's `NewApi` check does not follow
+  it into the helper (commit `5a9a2c2`, after the 0.5.3 tag; in 0.5.4).
+  With that, lint reports nothing for the three new plugins, and no
+  `ScopedStorage` warning. `gradle lintDebug` on the wgpu example still
+  fails on one **pre-existing** error outside these plans:
+  `media/MediaRequestPlugin.kt:178`, `MediaStore.getPickImagesMaxLimit`
+  needs R Extensions 2 (`NewApi`). `examples/build.sh` itself runs
+  `assembleDebug` only, so "builds with lint passing" was checked with a
+  separate `gradle lintDebug`.
+- **Plan 20261119_02, step 1, the JNI symbol.** The plan names
+  `Java_dev_highbay_libmobile_disk_space_DiskSpacePlugin_nativeDiskCheck`;
+  JNI mangles the package's `_` as `_1`, so the export is
+  `Java_dev_highbay_libmobile_disk_1space_DiskSpacePlugin_nativeDiskCheck`
+  (seen in the example's `.so` with `llvm-nm -D`).
+- **Plan 20261119_02, step 1, `watch`.** It reads the path once with
+  `statvfs` before starting the timer, and answers `DiskSpaceError::Path`
+  (watching nothing) if that fails; with `None` and no files directory,
+  `Platform`. The first reading is taken at once only while the activity
+  is resumed; otherwise at the next resume. The 1 s floor is
+  `disk_space::watch_interval_ms` (crate-private, host-tested).
+
+Checked: `cargo fmt --all -- --check`; `cargo clippy --all-targets` on
+the host (workspace, and `--all-features`) and for
+`aarch64-linux-android` (workspace with no features, with each new
+feature, `--all-features`, and `-p libmobile` alone with no features and
+each new feature): no new warnings (the one warning, `normalized` never
+used in `src/camera/qr/scan.rs`, is there before these changes, under
+`--all-features` on Android). `cargo test --workspace` and
+`cargo test -p libmobile --all-features` (263 lib tests) pass.
+`examples/build.sh wgpu` builds; `dexdump` shows `AllFilesAccessPlugin`,
+`MediaScanPlugin` and `DiskSpacePlugin`; the generated manifest has the
+permission once with `tools:ignore`. On the S23: after `install -r`
+(app op `MANAGE_EXTERNAL_STORAGE` at its default), `files-access` logs
+`Ok(Missing)` and `Ok("/storage/emulated/0")`, on launch, on resume and
+on the command; `files-access-open` answered `Err(NotVisible)`, correctly:
+the phone was dozing on its secure lock screen.
+
+Open, for the owner (the phone must be unlocked): plan 01's
+`files-access-open` to the app's own page and `App`, `Granted` after the
+switch and Back, the `media-scan` of a photo removed with `adb shell rm`
+leaving Google Photos, and the `NotDeclared` build
+(`LIBMOBILE_WGPU_NO_ALL_FILES=1`); plan 02's `disk-space` against
+`adb shell df /data` and the `disk-watch` timing. libmorph has not been
+built against 0.5.3 or 0.5.4: the Mac's disk was below the 3 GB floor
+the coordinator set. Both plans stay `In implementation` until then.
