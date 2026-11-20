@@ -1,4 +1,4 @@
-use libmobile::gradle::{Icon, Project};
+use libmobile::gradle::{AppPlugin, Icon, Project};
 
 fn main() {
     // `LIBMOBILE_WGPU_NO_ALL_FILES=1` leaves MANAGE_EXTERNAL_STORAGE out of
@@ -17,6 +17,12 @@ fn main() {
             Icon::png("icon/icon-1024.png")
                 .background_color([0x20, 0x24, 0x2c])
                 .monochrome_png("icon/monochrome-1024.png"),
+        )
+        // The example's own plugin: logs each resume and reports it to the
+        // cdylib (`android/java/dev/highbay/libmobile/example/wgpu/`).
+        .plugin(
+            AppPlugin::new("dev.highbay.libmobile.example.wgpu.ResumeLogPlugin")
+                .sources("android/java"),
         );
     // `--es cmd files-access` and `files-access-open`.
     let project = if all_files {

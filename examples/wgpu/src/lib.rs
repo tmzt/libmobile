@@ -81,6 +81,19 @@ pub const LINK: &str = "https://example.com/a?k=secret";
 mod gpu;
 pub mod uniforms;
 
+/// The native half of the example's own plugin
+/// (`android/java/.../ResumeLogPlugin.kt`, registered in build.rs with
+/// `Project::plugin`): app plugins' natives live in the app's cdylib.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+extern "system" fn Java_dev_highbay_libmobile_example_wgpu_ResumeLogPlugin_nativeResumed(
+    _env: *mut std::ffi::c_void,
+    _this: *mut std::ffi::c_void,
+    count: i32,
+) {
+    log::info!("wgpu example: ResumeLogPlugin reported resume #{count}");
+}
+
 #[cfg(target_os = "android")]
 mod app {
     use crate::gpu::{Gpu, window_changed};
