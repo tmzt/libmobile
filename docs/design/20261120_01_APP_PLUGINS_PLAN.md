@@ -1,7 +1,7 @@
 ---
 title: Plugins contributed by the app itself
 date: 2026-11-20
-status: In implementation
+status: Implemented
 covers:
   - "`gradle::AppPlugin` and `gradle::Project::plugin`: an app's build.rs registers its own `MobileActivityPlugin` objects, with their Kotlin sources and optional contributions (permissions, manifest elements, `<application>` elements, AAR dependencies)"
   - "`GeneratedAppPlugins.kt`: the app's half of the plugin list, written by the app's build script into the generated Gradle project, dispatched after libmobile's own plugins"
@@ -314,3 +314,27 @@ The owner's request of 2026-11-20 ("add app plugin registration to
 libmobile") is the instruction to build this plan. Step 1 starts with this
 commit, the first implementing one. Implementation has started and the
 document is now immutable (Rule 1.5).
+
+## Amendment — 2026-11-20 01:56 EST: implemented
+
+Every step is done and its **Done when:** holds; the status is
+`Implemented`.
+
+1. Codegen and the default list: `ae80548`. Host tests cover the
+   default and a two-plugin `GeneratedAppPlugins.kt`, the script's
+   property fallback and each class-name rule; `examples/build.sh
+   bitmap`, with no app plugin, builds.
+2. `AppPlugin` and `Project::plugin`: `60ddcee`.
+3. Example: `75f3b9d`. `dexdump` shows `ResumeLogPlugin` and
+   `GeneratedAppPlugins` listing it; `llvm-nm -D` shows the native
+   export (`out/app-plugins/LOG.md`).
+4. Release: `fb5aaab`, tag `v0.5.5`; the checks are in CHANGES.md
+   (`e67df60`).
+5. libmorph: libmorph `c759cee` (the pin, both crates, one commit),
+   `9adef0d` (libmorph-build's docs and `tests/app_plugin.rs`, where
+   `gradle_project(..).plugin(..)` compiles and generates), `253ad2b`
+   libmorph-build 0.5.5 and `e260e59` libmorph 0.10.1; its workspace
+   builds and tests against 0.5.5 from GitHub.
+
+Not part of any **Done when:** and still open: the `ResumeLogPlugin`
+log lines on a device.
