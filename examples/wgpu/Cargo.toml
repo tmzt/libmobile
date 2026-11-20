@@ -11,8 +11,9 @@ crate-type = ["lib", "cdylib"]
 
 [dependencies]
 # `clipboard`: `--es cmd clipboard` and `clipboard-write`; `image-codec`: `--es cmd image-codec`;
-# `media-request`: `--es cmd media-pick` and the other `media-*` commands.
-libmobile = { path = "../..", features = ["clipboard", "image-codec", "media-request"] }
+# `media-request`: `--es cmd media-pick` and the other `media-*` commands;
+# `all-files-access`: `files-access` and `files-access-open`; `media-scan`: `media-scan`.
+libmobile = { path = "../..", features = ["clipboard", "image-codec", "media-request", "all-files-access", "media-scan"] }
 log = "0.4"
 
 # The host copy, for `libmobile::gradle` in build.rs; `icons` makes the

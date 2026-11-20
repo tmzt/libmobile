@@ -50,6 +50,14 @@
 //! `media-small` (one image under a 1 MiB cap). This example has no CAMERA
 //! in its manifest, so the camera entry asks for no permission.
 //!
+//! `--es cmd files-access` logs `android::all_files_access::state` and
+//! `external_storage_dir`; `files-access-open` opens the All files access
+//! page and logs which (`open_settings`); `state` is logged again on each
+//! `Resume`. The build script declares `MANAGE_EXTERNAL_STORAGE` unless
+//! `LIBMOBILE_WGPU_NO_ALL_FILES=1` is set when it runs, which shows
+//! `NotDeclared`. `--es cmd media-scan --es path <path>` asks MediaStore to
+//! scan that path (`android::media_scan::scan_paths`) and logs the result.
+//!
 //! A long press (half a second, still) opens the soft keyboard
 //! (`android::set_text_input_with`) with the next of the options in
 //! `keyboards()`, logging their name; a long press while it is open moves to the
@@ -70,6 +78,7 @@ mod app {
     use crate::gpu::{Gpu, window_changed};
     use crate::uniforms::Uniforms;
     use libmobile::MobileEvent;
+    use libmobile::android::all_files_access;
     use libmobile::android::android_activity::input::{InputEvent, MotionAction};
     use libmobile::android::clipboard;
     use libmobile::android::dirs;
@@ -78,6 +87,7 @@ mod app {
     use libmobile::android::media::{
         self, CameraEntry, Delivery, MediaData, MediaKind, MediaRequest, MediaResponse, Picker,
     };
+    use libmobile::android::media_scan;
     use libmobile::android::{
         AndroidApp, InputStatus, MobileApp, build_info, night_mode, run, set_system_bar_icons,
         set_text_input_with,
@@ -361,6 +371,15 @@ mod app {
         });
     }
 
+    /// `--es cmd files-access`, and on each `Resume`.
+    fn log_files_access() {
+        log::info!(
+            "wgpu example: files-access state {:?}, external_storage_dir {:?}",
+            all_files_access::state(),
+            all_files_access::external_storage_dir()
+        );
+    }
+
     fn open() {
         log::info!("wgpu example: open link: {:?}", open_link(crate::LINK));
     }
@@ -400,7 +419,10 @@ mod app {
                         gpu.swapchain = None;
                     }
                 }
-                MobileEvent::Resume => self.resumed = true,
+                MobileEvent::Resume => {
+                    self.resumed = true;
+                    log_files_access();
+                }
                 MobileEvent::Pause => self.resumed = false,
                 MobileEvent::Insets(insets) => self.uniforms.set_safe_area(insets.safe_area),
                 MobileEvent::TrimMemory(level) => log::info!("wgpu example: TrimMemory({level:?})"),
@@ -453,6 +475,18 @@ mod app {
                             "wgpu example: clipboard write_text {:?}",
                             clipboard::write_text(app, CLIPBOARD_CHECK)
                         ),
+                        Some("files-access") => log_files_access(),
+                        Some("files-access-open") => log::info!(
+                            "wgpu example: files-access-open {:?}",
+                            all_files_access::open_settings()
+                        ),
+                        Some("media-scan") => match intent.extra("path") {
+                            Some(path) => log::info!(
+                                "wgpu example: media-scan {path}: {:?}",
+                                media_scan::scan_paths(&[std::path::Path::new(path)])
+                            ),
+                            None => log::warn!("wgpu example: media-scan needs --es path <path>"),
+                        },
                         Some("image-codec") => {
                             std::thread::spawn(codec_test);
                         }
