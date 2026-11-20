@@ -40,7 +40,12 @@ object AllFilesAccessPlugin : MobileActivityPlugin {
     @JvmStatic
     fun state(context: Context): String = try {
         val app = context.applicationContext
-        unavailable(app) ?: if (Environment.isExternalStorageManager()) GRANTED else MISSING
+        // The SDK check is repeated here, where lint's NewApi check sees it.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            UNSUPPORTED
+        } else {
+            unavailable(app) ?: if (Environment.isExternalStorageManager()) GRANTED else MISSING
+        }
     } catch (e: Exception) {
         "platform: $e"
     }
