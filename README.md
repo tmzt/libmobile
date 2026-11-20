@@ -167,6 +167,64 @@ cargo build --release --target aarch64-linux-android --lib
 gradle -p target/aarch64-linux-android/release/gradle/<package> assembleDebug
 ```
 
+### The app's own plugins
+
+An app can add `MobileActivityPlugin`s of its own, for the Android it needs
+that libmobile does not ship. Register each one from the build script:
+
+```rust
+use libmobile::gradle::{AppPlugin, Project};
+
+Project::new("dev.tmzt.shottoss")
+    .plugin(
+        AppPlugin::new("dev.tmzt.shottoss.media.MediaStorePlugin")
+            .sources("android/java")                     // relative to the crate root
+            .permission("android.permission.READ_MEDIA_IMAGES")
+            .manifest("<queries><package android:name=\"com.google.android.apps.photos\" /></queries>")
+            .application("<meta-data android:name=\"k\" android:value=\"v\" />")
+            .dependency("androidx.exifinterface:exifinterface:1.3.7"),
+    )
+    .generate()
+    .expect("gradle project");
+```
+
+```kotlin
+// android/java/dev/tmzt/shottoss/media/MediaStorePlugin.kt
+package dev.tmzt.shottoss.media
+
+object MediaStorePlugin : dev.highbay.libmobile.MobileActivityPlugin {
+    override fun onResume(activity: android.app.Activity) = nativeResumed()
+    private external fun nativeResumed()   // exported by the app's own cdylib
+}
+```
+
+- **The class** is a Kotlin `object`, fully qualified. It may not be in
+  `dev.highbay.libmobile` or a package libmobile ships Kotlin in; use the
+  app's own package.
+- **Sources** are source roots, relative to the crate root (or absolute),
+  compiled in place. `generate()` fails, naming the path, if a root is
+  missing or no root has `<package as dirs>/<Class>.kt` declaring
+  `object <Class>`. A plugin with no sources comes from an AAR.
+- **Order:** every hook reaches libmobile's plugins first, then the app's,
+  in the order of the `plugin` calls. The generated project lists them in
+  `GeneratedAppPlugins.kt`; with no app plugins it is unchanged.
+- **Natives:** the plugin's `external fun`s are exported by the app's
+  cdylib (`Java_dev_tmzt_shottoss_media_MediaStorePlugin_nativeResumed`),
+  which is registered before the first `onCreate`.
+- **What it may use from libmobile's Kotlin:** `MobileActivityPlugin`,
+  `MobileNativeActivity`, `GeneratedPlugins.activePlugins` and
+  `GeneratedAppPlugins.plugins`. The rest (`NativeLib`, the `bridge`
+  objects, the feature plugins) is internal and may change in any release;
+  reach libmobile's capabilities through the app's own native method and
+  libmobile's Rust API. Activity and permission request codes `0x4000` to
+  `0x7FFF` are libmobile's.
+
+In your own Gradle project, subclass `MobileNativeActivity` with
+`override val plugins = GeneratedPlugins.activePlugins + GeneratedAppPlugins.plugins + MyPlugin`,
+or set the project property `LIBMOBILE_APP_PLUGINS_ROOT` to a source root
+holding your own `dev/highbay/libmobile/GeneratedAppPlugins.kt` before
+applying `libmobile.gradle`.
+
 ### App icon
 
 With the `icons` feature on the build-dependency, the build script makes
@@ -783,7 +841,9 @@ opens the All files access page and logs which, and
 `disk_space::space` of the files directory and of `/storage/emulated/0`
 with each call's time; `disk-watch` (optionally `--es interval <seconds>`)
 watches the files directory and logs each `MobileEvent::DiskSpace`, and
-`disk-unwatch` stops it.
+`disk-unwatch` stops it. Its own app plugin, `ResumeLogPlugin`
+(`examples/wgpu/android/java/`, registered with `Project::plugin`), logs
+each resume and reports it to a native in the example's cdylib.
 
 ## Development
 

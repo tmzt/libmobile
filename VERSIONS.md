@@ -380,3 +380,22 @@ Free space, the cache quota and periodic readings
 - `MobileEvent::DiskSpace(DiskSpace)` under `disk-space` (`MobileEvent` is
   `#[non_exhaustive]`).
 - A new `codegen::PLUGINS` entry.
+
+## 0.5.5 — 2026-11-20 (tag `v0.5.5`)
+
+Plugins contributed by the app itself
+(`docs/design/20261120_01_APP_PLUGINS_PLAN.md`). Additive.
+
+- `gradle::AppPlugin` (`new`, `sources`, `permission`, `manifest`,
+  `application`, `dependency`, `class`) and `gradle::Project::plugin`: the
+  app's build script registers its own `MobileActivityPlugin` objects,
+  written to `GeneratedAppPlugins.kt` in the generated project and
+  dispatched after libmobile's plugins. A project without app plugins is
+  generated unchanged.
+- `codegen::{APP_PLUGINS_OBJECT, APP_PLUGINS_DIR, APP_PLUGINS_ROOT_PROPERTY,
+  generated_app_plugins_kt, check_app_plugin_class}`.
+- Kotlin: `GeneratedAppPlugins.plugins` (empty by default), and
+  `MobileNativeActivity`'s default `plugins` is
+  `GeneratedPlugins.activePlugins + GeneratedAppPlugins.plugins`.
+  `libmobile.gradle` adds the app plugins' source root (the empty default,
+  or the project's `LIBMOBILE_APP_PLUGINS_ROOT`).
