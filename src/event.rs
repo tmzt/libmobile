@@ -190,6 +190,11 @@ pub enum MobileEvent {
     /// (`media-request`).
     #[cfg(feature = "media-request")]
     Media(crate::media::MediaResponse),
+    /// A reading of the volume `android::disk_space::watch` watches, on
+    /// resume and every interval while resumed (`disk-space`). `allocatable`
+    /// and `cache_quota` are `None`: the timer reads `statvfs` only.
+    #[cfg(feature = "disk-space")]
+    DiskSpace(crate::disk_space::DiskSpace),
     /// The user answered a
     /// [`request_permissions`](crate::android::request_permissions) call.
     Permissions(PermissionsOutcome),

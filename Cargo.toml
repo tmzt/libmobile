@@ -76,6 +76,13 @@ all-files-access = []
 # android/java/dev/highbay/libmobile/media_scan, src/android/media_scan.rs).
 # No permission.
 media-scan = []
+# Free space and the app's cache quota (`disk_space::statvfs_space` on any
+# Unix host, `android::disk_space::space` adding StorageManager's numbers),
+# and `android::disk_space::watch`: a statvfs reading on resume and every
+# interval while resumed, as `MobileEvent::DiskSpace`
+# (android/java/dev/highbay/libmobile/disk_space, src/android/disk_space.rs).
+# No permission.
+disk-space = ["dep:libc"]
 # Image decoding and encoding through Android's own codecs
 # (android/java/dev/highbay/libmobile/image, src/android/image_codec.rs):
 # `probe_image`, `decode_image` (ImageDecoder: EXIF orientation, HEIC/HEIF)
@@ -123,6 +130,8 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 # `image` dependency: it reads the camera's grey plane directly. Licence
 # `(MIT OR Apache-2.0) AND ISC` (the ISC part from quirc).
 rqrr = { version = "0.11", default-features = false, optional = true }
+# `statvfs` (feature `disk-space`); already in the tree through jni and ndk.
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # QR codes rendered for the `camera-qr` host tests only.

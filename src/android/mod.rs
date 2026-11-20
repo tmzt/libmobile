@@ -36,6 +36,8 @@ pub mod camera_intent;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 pub mod dirs;
+#[cfg(feature = "disk-space")]
+pub mod disk_space;
 #[cfg(feature = "image-codec")]
 pub mod image_codec;
 mod insets;
@@ -243,6 +245,10 @@ fn pump_bridges<A: MobileApp>(app: &AndroidApp, handler: &mut A) {
     #[cfg(feature = "notifications")]
     for event in notify::take_events() {
         handler.event(app, MobileEvent::Notify(event));
+    }
+    #[cfg(feature = "disk-space")]
+    if let Some(space) = disk_space::take_pending() {
+        handler.event(app, MobileEvent::DiskSpace(space));
     }
 }
 

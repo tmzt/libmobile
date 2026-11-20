@@ -318,6 +318,14 @@ pub const PLUGINS: &[Plugin] = &[
         class: "media_scan.MediaScanPlugin",
         contributes: Contributes::NOTHING,
     },
+    // Free space, the cache quota and the watch timer (`disk_space/`,
+    // `src/android/disk_space.rs`). No permission or manifest entry.
+    Plugin {
+        feature: Some("disk-space"),
+        dir: "disk_space",
+        class: "disk_space.DiskSpacePlugin",
+        contributes: Contributes::NOTHING,
+    },
 ];
 
 /// A Cargo feature that only sets a `Boolean` constant in
@@ -1147,6 +1155,7 @@ mod tests {
                 "image-codec",
                 "all-files-access",
                 "media-scan",
+                "disk-space",
                 "secure-store-no-strongbox"
             ]
         );
@@ -1291,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn all_files_access_and_media_scan_plugins_are_gated_and_contribute_nothing() {
+    fn storage_plugins_are_gated_and_contribute_nothing() {
         for (feature, dir, class) in [
             (
                 "all-files-access",
@@ -1299,6 +1308,7 @@ mod tests {
                 "all_files_access.AllFilesAccessPlugin",
             ),
             ("media-scan", "media_scan", "media_scan.MediaScanPlugin"),
+            ("disk-space", "disk_space", "disk_space.DiskSpacePlugin"),
         ] {
             assert!(!active_plugins(&[]).iter().any(|p| p.dir == dir));
             let active = active_plugins(&[feature]);

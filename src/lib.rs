@@ -74,6 +74,8 @@ pub mod camera_intent;
 #[cfg(feature = "clipboard")]
 pub mod clipboard;
 pub mod codegen;
+#[cfg(feature = "disk-space")]
+pub mod disk_space;
 pub mod event;
 pub mod gradle;
 #[cfg(feature = "icons")]

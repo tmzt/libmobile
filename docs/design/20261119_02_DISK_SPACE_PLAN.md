@@ -1,7 +1,7 @@
 ---
 title: Free space, the cache quota, and disk pressure reported when it changes
 date: 2026-11-19
-status: Draft
+status: In implementation
 covers:
   - "Feature `disk-space`: `disk_space::statvfs_space(path)` (POSIX, any host) and `android::disk_space::space(path)` adding Android's allocatable bytes and the app's cache quota from `StorageManager`"
   - "Why `getAllocatableBytes` and not the storage-low broadcast or `getFreeSpace` for API 30 and later"
@@ -409,3 +409,10 @@ of milliseconds in the storage service, so it stays out of any timer and
 runs only when an app calls `space`.
 
 Versioning stands: additive, a patch release.
+
+## Amendment — 2026-11-19 19:40 EST: implementation started; the document is now immutable
+
+The owner approved the plan on 2026-11-19 ("approve and build"), as
+amended at 18:35 EST: low-level readings only, with no grading and no
+engine file. Step 1 starts with this commit, the first implementing one.
+Implementation has started and the document is now immutable (Rule 1.5).
