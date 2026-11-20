@@ -19,6 +19,8 @@
 //! [`Mailbox`](crate::mailbox::Mailbox), so no Java thread ever touches app
 //! state.
 
+#[cfg(feature = "all-files-access")]
+pub mod all_files_access;
 mod appearance;
 #[cfg(feature = "cpal")]
 pub mod audio_capture;
@@ -42,6 +44,8 @@ mod jni_util;
 pub mod link;
 #[cfg(feature = "media-request")]
 pub mod media;
+#[cfg(feature = "media-scan")]
+pub mod media_scan;
 #[cfg(any(feature = "foreground-service", feature = "notifications"))]
 mod notification;
 #[cfg(feature = "notifications")]

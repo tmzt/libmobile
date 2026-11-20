@@ -65,6 +65,17 @@ notifications = []
 # The clipboard's text, read and written (android/java/dev/highbay/libmobile/clipboard,
 # src/android/clipboard.rs): `read_text`, `has_text` and `write_text`. No permission.
 clipboard = []
+# All files access (`MANAGE_EXTERNAL_STORAGE`, Android 11+):
+# `android::all_files_access::state`, `open_settings` and
+# `external_storage_dir` (android/java/dev/highbay/libmobile/all_files_access,
+# src/android/all_files_access.rs). Declares nothing by itself: the build
+# script calls `gradle::Project::all_files_access`.
+all-files-access = []
+# Telling MediaStore about created, changed, moved or deleted files
+# (`android::media_scan::scan_paths`, through `MediaScannerConnection`;
+# android/java/dev/highbay/libmobile/media_scan, src/android/media_scan.rs).
+# No permission.
+media-scan = []
 # Image decoding and encoding through Android's own codecs
 # (android/java/dev/highbay/libmobile/image, src/android/image_codec.rs):
 # `probe_image`, `decode_image` (ImageDecoder: EXIF orientation, HEIC/HEIF)

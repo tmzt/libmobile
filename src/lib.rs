@@ -58,6 +58,8 @@
 // the activity reference android-activity owns. Everything else is safe.
 #![deny(unsafe_code)]
 
+#[cfg(feature = "all-files-access")]
+pub mod all_files_access;
 #[cfg(feature = "cpal")]
 pub mod audio_capture;
 #[cfg(feature = "google-auth")]
@@ -85,6 +87,8 @@ pub mod link;
 pub mod mailbox;
 #[cfg(feature = "media-request")]
 pub mod media;
+#[cfg(feature = "media-scan")]
+pub mod media_scan;
 #[cfg(any(feature = "foreground-service", feature = "notifications"))]
 mod notification;
 #[cfg(feature = "notifications")]

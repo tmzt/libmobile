@@ -1,7 +1,7 @@
 ---
 title: All files access, the shared storage root, and telling MediaStore about changed files
 date: 2026-11-19
-status: Draft
+status: In implementation
 covers:
   - "Feature `all-files-access`: `android::all_files_access::state`, `open_settings` and `external_storage_dir`, through `Environment` and the system's All files access page"
   - "Feature `media-scan`: `android::media_scan::scan_paths`, through `MediaScannerConnection.scanFile`"
@@ -289,3 +289,10 @@ without a minor bump of their own.
   it names and adds that to the same attribute (a recorded departure).
 - **Play.** The permission's restriction is Play's policy, not Android's;
   the method's documentation says so, as `battery`'s does.
+
+## Amendment — 2026-11-19 19:32 EST: implementation started; the document is now immutable
+
+The owner approved the plan on 2026-11-19 ("approve and build"). It is
+approved as written. Step 1 starts with this commit, the first
+implementing one. Implementation has started and the document is now
+immutable (Rule 1.5).

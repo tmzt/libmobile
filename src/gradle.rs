@@ -263,6 +263,26 @@ impl Project {
         self
     }
 
+    /// Declare `MANAGE_EXTERNAL_STORAGE`, so the app can be granted All files
+    /// access (`android::all_files_access`, feature `all-files-access`).
+    /// The element carries `tools:ignore="ScopedStorage"`, so Android lint
+    /// does not warn on the app's own, intended choice.
+    /// Google Play allows it only for apps whose core purpose needs it (file
+    /// managers, backup, and similar); sideloaded apps are not bound by that.
+    pub fn all_files_access(mut self) -> Self {
+        if !self
+            .spec
+            .permissions
+            .iter()
+            .any(|p| p == codegen::MANAGE_EXTERNAL_STORAGE)
+        {
+            self.spec
+                .permissions
+                .push(codegen::MANAGE_EXTERNAL_STORAGE.to_string());
+        }
+        self
+    }
+
     /// The launcher icon, made from PNGs into the project's resources
     /// (`mipmap-*`, the adaptive icon) with `android:icon` and
     /// `android:roundIcon` on `<application>`. Without it the app has the
@@ -1032,6 +1052,39 @@ mod tests {
         assert_eq!(project.service_types, Some(vec![ServiceType::Microphone]));
         assert!(project.service_keeps_running);
         assert_eq!(project.spec.permissions, [IGNORE_BATTERY_OPTIMIZATIONS]);
+    }
+
+    #[test]
+    fn all_files_access_declares_the_permission_once_with_tools_ignore() {
+        let project = Project::new("a.b").all_files_access().all_files_access();
+        assert_eq!(project.spec.permissions, [codegen::MANAGE_EXTERNAL_STORAGE]);
+        let files = project
+            .spec
+            .render(Path::new("/l.gradle"), Path::new("/l.so"), "arm64-v8a");
+        let manifest = &files.iter().find(|(n, _)| *n == MANIFEST).unwrap().1;
+        assert_eq!(
+            manifest
+                .matches("android.permission.MANAGE_EXTERNAL_STORAGE")
+                .count(),
+            1
+        );
+        assert!(manifest.contains(
+            "<uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\" \
+             tools:ignore=\"ScopedStorage\" />"
+        ));
+        assert!(manifest.contains("xmlns:tools=\"http://schemas.android.com/tools\""));
+    }
+
+    #[test]
+    fn manifest_without_all_files_access_has_no_tools_namespace() {
+        let files = Project::new("a.b").spec.render(
+            Path::new("/l.gradle"),
+            Path::new("/l.so"),
+            "arm64-v8a",
+        );
+        let manifest = &files.iter().find(|(n, _)| *n == MANIFEST).unwrap().1;
+        assert!(!manifest.contains("xmlns:tools"));
+        assert!(!manifest.contains("MANAGE_EXTERNAL_STORAGE"));
     }
 
     #[test]
